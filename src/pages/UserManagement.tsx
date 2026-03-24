@@ -253,7 +253,7 @@ export default function UserManagement() {
 
           {filtered.length === 0 && (
             <div className="py-16 text-center">
-              <Users className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <Search className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">No users match your filters</p>
             </div>
           )}
