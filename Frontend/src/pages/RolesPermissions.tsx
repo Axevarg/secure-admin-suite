@@ -40,7 +40,8 @@ const MODULES = [
   "recepcion_material",
   "evidencias",
   "aprobaciones",
-  "remesas"
+  "remesas",
+  "rh"
 ];
 
 const PERMISSIONS = [

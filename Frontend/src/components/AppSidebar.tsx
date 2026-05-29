@@ -21,7 +21,9 @@ import {
   TruckIcon,
   CreditCard,
   Camera,
-  ArrowLeft, Landmark, ChevronDown
+  ArrowLeft,
+  Landmark,
+  ChevronDown, ClipboardCheck, Banknote, ShieldCheck, Wallet, ArrowRightLeft
 } from "lucide-react";
 
 import { NavLink } from "@/components/NavLink";
@@ -45,47 +47,157 @@ import {
 ========================= */
 
 const mainNav = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, perm: "dashboard:view" },
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
+    perm: "dashboard:view",
+  },
   { title: "Obras", url: "/obras", icon: Building2, perm: "obras:view" },
 ];
 
 const systemNav = [
-  { title: "Clientes", url: "/clientes", icon: Briefcase, perm: "clientes:view" },
-  { title: "Proveedores", url: "/proveedores", icon: Truck, perm: "proveedores:view" },
-  { title: "Trabajadores", url: "/trabajadores", icon: HardHat, perm: "trabajadores:view" },
-  { title: "Contratistas", url: "/contratistas", icon: Construction, perm: "contratistas:view" },
-  { title: "Especialidades", url: "/especialidades", icon: Tags, perm: "especialidades:view" },
-  { title: "Aprobaciones", url: "/aprobaciones", icon: Tags, perm: "aprobaciones:view" },
-  { title: "Remesas", url: "/remesas", icon: Tags, perm: "remesas:view" },
-  { title: "Bancos", icon: Landmark, perm: "remesas:view",
-  children: [
-    { title: "Dashboard", url: "/bancos", icon: Building2, perm: "remesas:view", },
-    { title: "Cuentas", url: "/bancos/cuentas", icon: CreditCard, perm: "remesas:view", },
-    { title: "Movimientos", url: "/bancos/movimientos", icon: DollarSign, perm: "remesas:view", },
+  {
+    title: "Clientes",
+    url: "/clientes",
+    icon: Briefcase,
+    perm: "clientes:view",
+  },
+  {
+    title: "Proveedores",
+    url: "/proveedores",
+    icon: Truck,
+    perm: "proveedores:view",
+  },
+  {
+    title: "Trabajadores",
+    url: "/trabajadores",
+    icon: HardHat,
+    perm: "trabajadores:view",
+  },
+  {
+    title: "Contratistas",
+    url: "/contratistas",
+    icon: Construction,
+    perm: "contratistas:view",
+  },
+  {
+    title: "Especialidades",
+    url: "/especialidades",
+    icon: Tags,
+    perm: "especialidades:view",
+  },
+  {
+    title: "Aprobaciones",
+    url: "/aprobaciones",
+    icon: ClipboardCheck,
+    perm: "aprobaciones:view",
+  },
+  {
+    title: "Remesas",
+    url: "/remesas",
+    icon: Banknote,
+    perm: "remesas:view",
+  },
+
+  /* ── BANCOS ───────────────────── */
+  {
+    title: "Bancos",
+    icon: Landmark,
+    perm: "remesas:view",
+    children: [
+      {
+        title: "Dashboard",
+        url: "/bancos",
+        icon: LayoutDashboard,
+        perm: "remesas:view",
+      },
+      {
+        title: "Cuentas",
+        url: "/bancos/cuentas",
+        icon: CreditCard,
+        perm: "remesas:view",
+      },
+      {
+        title: "Movimientos",
+        url: "/bancos/movimientos",
+        icon: ArrowRightLeft,
+        perm: "remesas:view",
+      },
     ],
   },
 
-  { title: "Nominas", icon: Landmark, perm: "remesas:view",
-  children: [
-    { title: "Colaboradores", url: "/colaboradores", icon: Building2, perm: "remesas:view", },
-
+  /* ── NÓMINAS / RH ─────────────── */
+  {
+    title: "Nóminas",
+    icon: Wallet,
+    perm: "rh:view",
+    children: [
+      {
+        title: "Colaboradores",
+        url: "/colaboradores",
+        icon: Users,
+        perm: "rh:view",
+      },
     ],
   },
-  { title: "Usuarios", url: "/usuarios", icon: UserCog, perm: "usuarios:view" },
-  { title: "Roles", url: "/roles", icon: KeyRound, perm: "usuarios:view" },
+
+  {
+    title: "Usuarios",
+    url: "/usuarios",
+    icon: UserCog,
+    perm: "usuarios:view",
+  },
+  {
+    title: "Roles",
+    url: "/roles",
+    icon: ShieldCheck,
+    perm: "usuarios:view",
+  },
 ];
+
 
 /* =========================
    NAV OBRA (WORKSPACE)
 ========================= */
 
 const obraNav = (id: string) => [
-  { title: "Dashboard Obra", url: `/obras/${id}/dashboard`, icon: LayoutDashboard, perm: "obra_dashboard:view" },
-  { title: "Personal en Obra", url: `/obras/${id}/personal`, icon: Users, perm: "trabajadores:view" },
-  { title: "Asistencia", url: `/obras/${id}/asistencia`, icon: Clock, perm: "asistencia:view" },
-  { title: "Insumos", url: `/obras/${id}/insumos`, icon: DollarSign, perm: "presupuesto:view" },
-  { title: "Requisiciones", url: `/obras/${id}/requisiciones`, icon: DollarSign, perm: "requisiciones:view" },
-  { title: "Evidencias", url: `/obras/${id}/evidencias`, icon: Camera, perm: "evidencias:view" },
+  {
+    title: "Dashboard Obra",
+    url: `/obras/${id}/dashboard`,
+    icon: LayoutDashboard,
+    perm: "obra_dashboard:view",
+  },
+  {
+    title: "Personal en Obra",
+    url: `/obras/${id}/personal`,
+    icon: Users,
+    perm: "trabajadores:view",
+  },
+  {
+    title: "Asistencia",
+    url: `/obras/${id}/asistencia`,
+    icon: Clock,
+    perm: "asistencia:view",
+  },
+  {
+    title: "Insumos",
+    url: `/obras/${id}/insumos`,
+    icon: Package,
+    perm: "presupuesto:view",
+  },
+  {
+    title: "Requisiciones",
+    url: `/obras/${id}/requisiciones`,
+    icon: ClipboardList,
+    perm: "requisiciones:view",
+  },
+  {
+    title: "Evidencias",
+    url: `/obras/${id}/evidencias`,
+    icon: Camera,
+    perm: "evidencias:view",
+  },
 ];
 
 export function AppSidebar() {
@@ -101,12 +213,15 @@ export function AppSidebar() {
   const [user, setUser] = useState<any>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
 
-  const [openBanks, setOpenBanks] = useState(
-  location.pathname.startsWith("/bancos")
-);
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
+    Bancos: location.pathname.startsWith("/bancos"),
+    Nominas: location.pathname.startsWith("/colaboradores"),
+  });
 
   useEffect(() => {
-    const storage = localStorage.getItem("user") ? localStorage : sessionStorage;
+    const storage = localStorage.getItem("user")
+      ? localStorage
+      : sessionStorage;
 
     const storedUser = storage.getItem("user");
     const storedPermissions = storage.getItem("permissions");
@@ -116,7 +231,11 @@ export function AppSidebar() {
   }, []);
 
   const initials = user?.name
-    ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase()
+    ? user.name
+        .split(" ")
+        .map((n: string) => n[0])
+        .join("")
+        .toUpperCase()
     : "AV";
 
   const role = user?.role_name || "usuario";
@@ -128,8 +247,10 @@ export function AppSidebar() {
 
   const nav = isObraView ? obraNav(obraId!) : mainNav;
 
-  const filteredNav = nav.filter(item => hasPermission(item.perm));
-const filteredSystemNav = systemNav.filter(item => hasPermission(item.perm));
+  const filteredNav = nav.filter((item) => hasPermission(item.perm));
+  const filteredSystemNav = systemNav.filter((item) =>
+    hasPermission(item.perm),
+  );
 
   return (
     <Sidebar collapsible="icon" className="border-r border-slate-200 bg-white">
@@ -226,7 +347,12 @@ const filteredSystemNav = systemNav.filter(item => hasPermission(item.perm));
                         <div key={item.title} className="space-y-1">
                           {/* PADRE */}
                           <button
-                            onClick={() => setOpenBanks(!openBanks)}
+                            onClick={() =>
+                              setOpenMenus((prev) => ({
+                                ...prev,
+                                [item.title]: !prev[item.title],
+                              }))
+                            }
                             className={`w-full flex items-center justify-between px-2.5 py-1 rounded-lg text-sm font-bold transition ${
                               isChildActive
                                 ? "bg-red-600 text-white shadow-md"
@@ -242,14 +368,14 @@ const filteredSystemNav = systemNav.filter(item => hasPermission(item.perm));
                               <ChevronDown
                                 size={14}
                                 className={`transition-transform ${
-                                  openBanks ? "rotate-180" : ""
+                                  openMenus[item.title] ? "rotate-180" : ""
                                 }`}
                               />
                             )}
                           </button>
 
                           {/* HIJOS */}
-                          {openBanks && !collapsed && (
+                          {openMenus[item.title] && !collapsed && (
                             <div className="ml-4 pl-3 border-l border-slate-200 space-y-1">
                               {item.children
                                 .filter((child: any) =>

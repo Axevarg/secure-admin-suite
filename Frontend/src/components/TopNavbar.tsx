@@ -144,22 +144,7 @@ export function TopNavbar({ darkMode, onToggleDark }: TopNavbarProps) {
 
       {/* ACCIONES DERECHA */}
       <div className="flex items-center gap-2">
-        {showSearch ? (
-          <div className="relative animate-in slide-in-from-right-4 duration-300">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-red-600" />
-            <Input 
-              autoFocus 
-              placeholder="BUSCAR EN SIGO..." 
-              className="w-64 h-10 pl-9 rounded-2xl bg-slate-50 border-none font-black text-[9px] uppercase tracking-widest focus-visible:ring-1 focus-visible:ring-red-100 transition-all"
-              onBlur={() => setShowSearch(false)} 
-            />
-          </div>
-        ) : (
-          <Button className="rounded-2xl hover:bg-slate-100 text-slate-400 hover:text-red-600 h-10 w-10 transition-all"
-            variant="ghost" size="icon" onClick={() => setShowSearch(true)}>
-            <Search className="w-4 h-4" strokeWidth={2.5} />
-          </Button>
-        )}
+
 
         {/* NOTIFICATIONS */}
         <DropdownMenu>
@@ -206,12 +191,7 @@ export function TopNavbar({ darkMode, onToggleDark }: TopNavbarProps) {
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Sesión Activa</p>
               <p className="text-[11px] font-black text-slate-900 truncate uppercase">{user?.email}</p>
             </div>
-            <DropdownMenuItem className="font-black uppercase text-[10px] tracking-widest focus:bg-red-50 focus:text-red-600 transition-colors rounded-xl py-3 px-4 mb-1 cursor-pointer">
-              <User className="w-4 h-4 mr-3 opacity-50" /> Mi Perfil
-            </DropdownMenuItem>
-            <DropdownMenuItem className="font-black uppercase text-[10px] tracking-widest focus:bg-red-50 focus:text-red-600 transition-colors rounded-xl py-3 px-4 mb-1 cursor-pointer">
-              <Settings className="w-4 h-4 mr-3 opacity-50" /> Preferencias
-            </DropdownMenuItem>
+          
             <DropdownMenuSeparator className="bg-slate-50" />
             <DropdownMenuItem onClick={handleLogout}
               className="font-black uppercase text-[10px] tracking-widest focus:bg-red-600 focus:text-white transition-all rounded-xl py-3 px-4 cursor-pointer text-red-600 mt-1">
