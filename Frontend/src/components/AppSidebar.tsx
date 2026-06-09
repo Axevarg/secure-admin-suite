@@ -23,7 +23,8 @@ import {
   Camera,
   ArrowLeft,
   Landmark,
-  ChevronDown, ClipboardCheck, Banknote, ShieldCheck, Wallet, ArrowRightLeft
+  ChevronDown, ClipboardCheck, Banknote, ShieldCheck, Wallet, ArrowRightLeft,
+  Coins
 } from "lucide-react";
 
 import { NavLink } from "@/components/NavLink";
@@ -137,6 +138,12 @@ const systemNav = [
         title: "Colaboradores",
         url: "/colaboradores",
         icon: Users,
+        perm: "rh:view",
+      },
+      {
+        title: "Nomina",
+        url: "/nomina",
+        icon: Coins,
         perm: "rh:view",
       },
     ],

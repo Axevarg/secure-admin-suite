@@ -3,7 +3,7 @@ import {
   getCuentas, crearCuenta, toggleCuenta,
   getMovimientos, crearMovimiento, cancelarMovimiento,
   getDashboard, getEvidenciasMovimiento,
-  subirEvidenciaMovimiento, getCategorias, upload,
+  subirEvidenciaMovimiento, getCategorias, upload, getProveedores, actualizarMovimiento, confirmarMovimiento
 } from "../controllers/bancos.controller.js";
 
 import {authMiddleware}from "../modules/auth/auth.middleware.js"
@@ -30,4 +30,8 @@ router.post("/evidencias/upload", upload.array("files", 10), subirEvidenciaMovim
 // Catálogos
 router.get("/categorias",        getCategorias);
 
+router.get("/proveedores", getProveedores);
+router.put("/movimientos/:id", actualizarMovimiento);
+
+router.patch("/movimientos/:id/confirmar", confirmarMovimiento);
 export default router;

@@ -643,3 +643,110 @@ export const crearPuesto = async (req, res) => {
 
   res.json(rows[0]);
 };
+
+// ── ASIGNACIONES DE OBRA ─────────────────────────────────
+
+// GET asignación activa + historial del colaborador
+export const getAsignaciones = async (req, res) => {
+  try {
+    const { colaboradorId } = req.params;
+
+    const { rows } = await pool.query(`
+      SELECT
+        a.*,
+        o.nombre AS obra_nombre,
+        o.ubicacion AS obra_ubicacion,
+        u.name AS asignado_por_nombre
+      FROM asignaciones_obra a
+      LEFT JOIN obras o ON o.id = a.obra_id
+      LEFT JOIN users u ON u.id = a.asignado_por
+      WHERE a.colaborador_id = $1
+      ORDER BY a.es_activa DESC, a.fecha_inicio DESC
+    `, [colaboradorId]);
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Error al obtener asignaciones" });
+  }
+};
+
+// POST asignar a obra (cierra la activa anterior automáticamente)
+export const asignarObra = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const { colaboradorId } = req.params;
+    const { obra_id, fecha_inicio, porcentaje_dedicacion, notas, usuario_id } = req.body;
+
+    // Cerrar asignación activa anterior
+    await client.query(`
+      UPDATE asignaciones_obra
+      SET es_activa = FALSE,
+          fecha_fin = $1
+      WHERE colaborador_id = $2
+        AND es_activa = TRUE
+    `, [fecha_inicio ?? new Date().toISOString().split("T")[0], colaboradorId]);
+
+    // Crear nueva asignación
+    const { rows } = await client.query(`
+      INSERT INTO asignaciones_obra
+        (colaborador_id, obra_id, fecha_inicio, porcentaje_dedicacion, notas, asignado_por)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [
+      colaboradorId,
+      obra_id,
+      fecha_inicio ?? new Date().toISOString().split("T")[0],
+      porcentaje_dedicacion ?? 100,
+      notas ?? null,
+      usuario_id ?? null,
+    ]);
+
+    // Registrar en historial laboral
+    await client.query(`
+      INSERT INTO historial_laboral
+        (colaborador_id, tipo_cambio, descripcion, registrado_por)
+      VALUES ($1, 'cambio_obra', $2, $3)
+    `, [
+      colaboradorId,
+      notas ?? "Reasignación de obra",
+      usuario_id ?? null,
+    ]);
+
+    await client.query("COMMIT");
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ msg: "Error al asignar obra" });
+  } finally {
+    client.release();
+  }
+};
+
+// DELETE / desasignar (sin nueva obra, queda sin asignación)
+export const desasignarObra = async (req, res) => {
+  try {
+    const { colaboradorId } = req.params;
+    const { usuario_id } = req.body;
+
+    await pool.query(`
+      UPDATE asignaciones_obra
+      SET es_activa = FALSE,
+          fecha_fin = CURRENT_DATE
+      WHERE colaborador_id = $1 AND es_activa = TRUE
+    `, [colaboradorId]);
+
+    await pool.query(`
+      INSERT INTO historial_laboral
+        (colaborador_id, tipo_cambio, descripcion, registrado_por)
+      VALUES ($1, 'desasignacion_obra', 'Colaborador sin obra asignada', $2)
+    `, [colaboradorId, usuario_id ?? null]);
+
+    res.json({ msg: "Desasignado correctamente" });
+  } catch (err) {
+    res.status(500).json({ msg: "Error al desasignar" });
+  }
+};

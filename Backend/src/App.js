@@ -1,9 +1,10 @@
 import express from "express";
+import 'dotenv/config';
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import authRoutes from "./modules/auth/auth.routes.js";
-import 'dotenv/config';
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;

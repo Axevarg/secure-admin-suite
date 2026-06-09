@@ -35,6 +35,8 @@ import BancosMovimientos from "./pages/Bancosmovimientos ";
 import ColaboradoresLista from "./pages/ColaboradoresPage";
 import ColaboradorPerfil from "./pages/ColaboradorPerfil";
 import ColaboradorForm from "./pages/ColaboradorForm";
+import NominaLista from "./pages/Nominalista";
+import NominaDetalle from "./pages/Nominadetalle";
 
 const queryClient = new QueryClient();
 
@@ -176,9 +178,13 @@ const App = () => (
             <Route path="/bancos/cuentas" element={<BancosCuentas />} />
             <Route path="/bancos/movimientos" element={<BancosMovimientos />} />
             <Route path="/colaboradores/nuevo" element={<ColaboradorForm />} />
-            // ✅ DESPUÉS la ruta dinámica
+            
             <Route path="/colaboradores/:id" element={<ColaboradorPerfil />} />
             <Route path="/colaboradores" element={<ColaboradoresLista />} />
+
+            <Route path="/nomina"     element={<NominaLista />} />
+            <Route path="/nomina/:id" element={<NominaDetalle />} />
+
             <Route
               path="/colaboradores/:id/editar"
               element={<ColaboradorForm />}

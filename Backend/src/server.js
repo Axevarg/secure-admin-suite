@@ -1,5 +1,6 @@
 import app from "./App.js";
 import express from "express";
+import 'dotenv/config';
 import usersRoutes from "./routes/users.router.js";
 import rolesRoutes from "./routes/roles.router.js";
 import clientesRoutes from "./routes/clientes.routes.js";
@@ -20,6 +21,7 @@ import obraDashboardRoutes from "./routes/obraDashboard.routes.js";
 import evidenciasRoutes from "./routes/evidencias.routes.js";
 import bancosRouter from "./routes/bancos.routes.js";
 import colaboradoresRouter from "./routes/colaboradores.routes.js";
+import nominaRouter from "./routes/nomina.routes.js";
 import cors from "cors";
 
 app.use(cors({
@@ -46,6 +48,7 @@ app.use("/dashboard", dashboardRoutes);
 app.use("/api", obraDashboardRoutes);
 app.use("/bancos", bancosRouter);
 app.use("/colaboradores", colaboradoresRouter);
+app.use("/nomina", nominaRouter);
 app.use(express.json());
 app.use("/uploads", (req, res, next) => {
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");

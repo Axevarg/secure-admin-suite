@@ -102,16 +102,24 @@ export const getMovimientos = async (req, res) => {
         c.nombre  AS cuenta_nombre,
         cd.nombre AS cuenta_destino_nombre,
         cat.nombre AS categoria_nombre,
+        p.nombre AS proveedor_nombre,
         u.name    AS creador,
         COUNT(ev.id) AS num_evidencias
       FROM movimientos_bancarios m
       LEFT JOIN cuentas_bancarias c   ON c.id  = m.cuenta_id
       LEFT JOIN cuentas_bancarias cd  ON cd.id = m.cuenta_destino_id
       LEFT JOIN categorias_movimientos cat ON cat.id = m.categoria_id
+      LEFT JOIN proveedores p ON p.id = m.proveedor_id
       LEFT JOIN users u               ON u.id  = m.created_by
       LEFT JOIN evidencias_movimientos ev ON ev.movimiento_id = m.id
       WHERE ${where.join(" AND ")}
-      GROUP BY m.id, c.nombre, cd.nombre, cat.nombre, u.name
+      GROUP BY
+          m.id,
+          c.nombre,
+          cd.nombre,
+          cat.nombre,
+          u.name,
+          p.nombre
       ORDER BY m.fecha_movimiento DESC, m.created_at DESC
     `, params);
 
@@ -135,11 +143,11 @@ const {
   monto,
   concepto,
   categoria_id,
+  proveedor_id,
   fecha_movimiento,
   estado,
   observaciones,
 } = req.body;
-
 const created_by = req.user?.id;
 
     // ─────────────────────────────────────────
@@ -224,37 +232,26 @@ const created_by = req.user?.id;
     // ─────────────────────────────────────────
     // INGRESO / GASTO NORMAL
     // ─────────────────────────────────────────
-    const { rows } = await client.query(
-      `
-      INSERT INTO movimientos_bancarios
-      (
-        tipo,
-        cuenta_id,
-        cuenta_destino_id,
-        monto,
-        concepto,
-        categoria_id,
-        fecha_movimiento,
-        estado,
-        observaciones,
-        created_by
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-      RETURNING *
-      `,
-      [
-        tipo,
-        cuenta_id,
-        cuenta_destino_id ?? null,
-        monto,
-        concepto,
-        categoria_id ?? null,
-        fecha_movimiento,
-        estado ?? "confirmado",
-        observaciones ?? null,
-        created_by,
-      ]
-    );
+   const { rows } = await client.query(
+  `INSERT INTO movimientos_bancarios
+   (tipo, cuenta_id, cuenta_destino_id, monto, concepto, categoria_id,
+    proveedor_id, fecha_movimiento, estado, observaciones, created_by)
+   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+   RETURNING *`,
+  [
+    tipo,
+    cuenta_id,
+    cuenta_destino_id ?? null,
+    monto,
+    concepto,
+    categoria_id ?? null,
+    proveedor_id ?? null,   // ← nuevo
+    fecha_movimiento,
+    estado ?? "confirmado",
+    observaciones ?? null,
+    created_by,
+  ]
+);
 
     await client.query("COMMIT");
 
@@ -383,5 +380,106 @@ export const getCategorias = async (_req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ msg: "Error" });
+  }
+};
+
+export const getProveedores = async (req, res) => {
+  const result = await pool.query(
+    "SELECT * FROM proveedores WHERE activo=true ORDER BY nombre"
+  );
+  res.json(result.rows);
+};
+
+
+export const actualizarMovimiento = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const actual = await pool.query(
+      `SELECT estado
+       FROM movimientos_bancarios
+       WHERE id=$1`,
+      [id]
+    );
+
+    if (!actual.rows.length) {
+      return res.status(404).json({
+        msg: "Movimiento no encontrado",
+      });
+    }
+
+    if (actual.rows[0].estado !== "pendiente") {
+      return res.status(400).json({
+        msg: "Solo los movimientos pendientes pueden editarse",
+      });
+    }
+
+    const {
+      concepto,
+      monto,
+      categoria_id,
+      proveedor_id,
+      observaciones,
+      fecha_movimiento,
+    } = req.body;
+
+    const { rows } = await pool.query(
+      `
+      UPDATE movimientos_bancarios
+      SET
+        concepto=$1,
+        monto=$2,
+        categoria_id=$3,
+        proveedor_id=$4,
+        observaciones=$5,
+        fecha_movimiento=$6,
+        updated_at=NOW()
+      WHERE id=$7
+      RETURNING *
+      `,
+      [
+        concepto,
+        monto,
+        categoria_id,
+        proveedor_id,
+        observaciones,
+        fecha_movimiento,
+        id,
+      ]
+    );
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      msg: "Error al actualizar movimiento",
+    });
+  }
+};
+
+export const confirmarMovimiento = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const actual = await pool.query(
+      "SELECT estado FROM movimientos_bancarios WHERE id=$1", [id]
+    );
+
+    if (!actual.rows.length)
+      return res.status(404).json({ msg: "No encontrado" });
+
+    if (actual.rows[0].estado !== "pendiente")
+      return res.status(400).json({ msg: "Solo se pueden confirmar movimientos pendientes" });
+
+    const { rows } = await pool.query(
+      `UPDATE movimientos_bancarios
+       SET estado='confirmado', updated_at=NOW()
+       WHERE id=$1 RETURNING *`, [id]
+    );
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Error al confirmar" });
   }
 };

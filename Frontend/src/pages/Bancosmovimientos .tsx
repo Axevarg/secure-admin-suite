@@ -18,6 +18,7 @@ import {
   XCircle,
   ArrowLeft,
   Wallet,
+  Pencil,
 } from "lucide-react";
 
 interface Cuenta {
@@ -45,10 +46,14 @@ interface Movimiento {
   fecha_movimiento: string;
   estado: string;
   cuenta_nombre: string;
+  proveedor_nombre: string;
   cuenta_destino_nombre: string;
   categoria_nombre: string;
   creador: string;
   num_evidencias: number;
+  proveedor_id?: number;
+  observaciones?: string;
+  categoria_id: number;
 }
 
 type FilePreview = { file: File; preview: string; tipo: "foto" | "pdf" };
@@ -318,6 +323,63 @@ export default function BancosMovimientos() {
   const [fQ, setFQ] = useState("");
   const [showFiltros, setShowFiltros] = useState(false);
 
+  const [proveedores, setProveedores] = useState([]);
+  // Agrega este estado junto a los demás
+  const [editModal, setEditModal] = useState<Movimiento | null>(null);
+  const [editForm, setEditForm] = useState({
+    concepto: "",
+    monto: "",
+    categoria_id: "",
+    proveedor_id: "",
+    observaciones: "",
+    fecha_movimiento: "",
+  });
+
+  // Junto a las demás funciones
+  const confirmar = async (id: number) => {
+    if (!confirm("¿Confirmar este movimiento? Ya no podrá editarse.")) return;
+    await api.patch(`/bancos/movimientos/${id}/confirmar`);
+    load();
+  };
+
+  // Función para abrir el modal de edición
+  const editarMovimiento = (m: Movimiento) => {
+    setEditForm({
+      concepto: m.concepto ?? "",
+      monto: String(m.monto),
+      categoria_id: String(m.categoria_id ?? ""),
+      proveedor_id: String(m.proveedor_id ?? ""),
+      observaciones: m.observaciones ?? "",
+      fecha_movimiento: m.fecha_movimiento?.split("T")[0] ?? "",
+    });
+    setEditModal(m);
+  };
+
+  // Función para guardar edición
+  const guardarEdicion = async () => {
+    if (!editModal) return;
+    setSaving(true);
+    try {
+      await api.put(`/bancos/movimientos/${editModal.id}`, {
+        ...editForm,
+        monto: Number(editForm.monto),
+        categoria_id: editForm.categoria_id
+          ? Number(editForm.categoria_id)
+          : null,
+        proveedor_id: editForm.proveedor_id
+          ? Number(editForm.proveedor_id)
+          : null,
+      });
+      setEditModal(null);
+      load();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    api.get("/proveedores").then((r) => setProveedores(r.data));
+  }, []);
 
   // Form nuevo movimiento
   const [form, setForm] = useState({
@@ -327,8 +389,9 @@ export default function BancosMovimientos() {
     monto: "",
     concepto: "",
     categoria_id: "",
+    proveedor_id: "",
     fecha_movimiento: new Date().toISOString().split("T")[0],
-    estado: "confirmado",
+    estado: "pendiente",
     observaciones: "",
   });
 
@@ -364,10 +427,8 @@ export default function BancosMovimientos() {
     setSaving(true);
 
     try {
-
       await api.post("/bancos/movimientos", {
         ...form,
-
 
         monto: Number(form.monto),
 
@@ -389,6 +450,7 @@ export default function BancosMovimientos() {
         monto: "",
         concepto: "",
         categoria_id: "",
+        proveedor_id: "",
         fecha_movimiento: new Date().toISOString().split("T")[0],
         estado: "confirmado",
         observaciones: "",
@@ -406,7 +468,7 @@ export default function BancosMovimientos() {
     load();
   };
 
-    const cuentaSeleccionada = cuentas.find(
+  const cuentaSeleccionada = cuentas.find(
     (c) => String(c.id) === form.cuenta_id,
   );
 
@@ -593,10 +655,15 @@ export default function BancosMovimientos() {
                       {tc.icon} {tc.label}
                     </div>
                   </td>
-                  <td className="p-5 max-w-[180px]">
+                  <td className="p-5 max-w-[200px]">
                     <p className="font-black text-xs text-slate-800 uppercase truncate">
                       {m.concepto ?? "—"}
                     </p>
+                    {m.proveedor_nombre && (
+                      <p className="text-[9px] text-slate-400 font-bold">
+                        PROVEEDOR: {m.proveedor_nombre}
+                      </p>
+                    )}
                     {m.creador && (
                       <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">
                         Pagó: {m.creador}
@@ -644,8 +711,8 @@ export default function BancosMovimientos() {
                       {ec.icon} {m.estado}
                     </div>
                   </td>
-                  <td className="p-5">
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <td className="p-1">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setEvidenciasId(m.id)}
                         className="p-2 bg-slate-100 hover:bg-slate-900 hover:text-white rounded-xl transition-all relative"
@@ -658,6 +725,34 @@ export default function BancosMovimientos() {
                           </span>
                         )}
                       </button>
+
+                      {m.estado === "pendiente" && (
+                        <>
+                          <button
+                            onClick={() => editarMovimiento(m)}
+                            className="p-2 bg-amber-100 hover:bg-amber-500 hover:text-white text-amber-600 rounded-xl transition-all"
+                            title="Editar"
+                          >
+                            <Pencil size={14} />
+                          </button>
+
+                          <button
+                            onClick={() => confirmar(m.id)}
+                            className="p-2 bg-emerald-100 hover:bg-emerald-500 hover:text-white text-emerald-600 rounded-xl transition-all"
+                            title="Confirmar"
+                          >
+                            <CheckCircle2 size={14} />
+                          </button>
+
+                          <button
+                            onClick={() => cancelar(m.id)}
+                            className="p-2 bg-red-100 hover:bg-red-500 hover:text-white text-red-600 rounded-xl transition-all"
+                            title="Cancelar movimiento"
+                          >
+                            <XCircle size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -692,7 +787,6 @@ export default function BancosMovimientos() {
                 onClick={() => setOpenModal(false)}
                 className="bg-white/10 hover:bg-red-600 p-2 rounded-xl transition-all"
                 // En el botón "Registrar Movimiento", agrega la condición al disabled:
-               
               >
                 <X size={20} />
               </button>
@@ -721,7 +815,6 @@ export default function BancosMovimientos() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
                       Cuenta Origen *
@@ -881,6 +974,33 @@ export default function BancosMovimientos() {
                 </div>
               </div>
 
+              {form.tipo !== "transferencia" && (
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                    Proveedor
+                  </label>
+
+                  <select
+                    value={form.proveedor_id}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        proveedor_id: e.target.value,
+                      })
+                    }
+                    className="w-full h-12 rounded-xl border border-slate-100 bg-slate-50 px-4 font-bold text-[10px] uppercase"
+                  >
+                    <option value="">Sin proveedor</option>
+
+                    {proveedores.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
                   Observaciones
@@ -922,6 +1042,150 @@ export default function BancosMovimientos() {
           movimientoId={evidenciasId}
           onClose={() => setEvidenciasId(null)}
         />
+      )}
+
+      {editModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && setEditModal(null)}
+        >
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="bg-amber-500 p-6 text-white flex justify-between items-center shrink-0">
+              <div>
+                <span className="bg-white/20 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                  Editando movimiento pendiente
+                </span>
+                <h2 className="text-lg font-black uppercase tracking-tighter mt-1">
+                  Movimiento #{editModal.id}
+                </h2>
+              </div>
+              <button
+                onClick={() => setEditModal(null)}
+                className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                    Monto *
+                  </label>
+                  <Input
+                    type="number"
+                    value={editForm.monto}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, monto: e.target.value })
+                    }
+                    className="h-12 rounded-xl border-slate-100 bg-slate-50 font-black text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                    Fecha *
+                  </label>
+                  <Input
+                    type="date"
+                    value={editForm.fecha_movimiento}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        fecha_movimiento: e.target.value,
+                      })
+                    }
+                    className="h-12 rounded-xl border-slate-100 bg-slate-50 font-bold text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                  Concepto
+                </label>
+                <Input
+                  value={editForm.concepto}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, concepto: e.target.value })
+                  }
+                  className="h-12 rounded-xl border-slate-100 bg-slate-50 font-bold text-xs uppercase"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                    Categoría
+                  </label>
+                  <select
+                    value={editForm.categoria_id}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, categoria_id: e.target.value })
+                    }
+                    className="w-full h-12 rounded-xl border border-slate-100 bg-slate-50 px-4 font-bold text-[10px] uppercase outline-none"
+                  >
+                    <option value="">Sin categoría</option>
+                    {categorias.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                    Proveedor
+                  </label>
+                  <select
+                    value={editForm.proveedor_id}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, proveedor_id: e.target.value })
+                    }
+                    className="w-full h-12 rounded-xl border border-slate-100 bg-slate-50 px-4 font-bold text-[10px] uppercase outline-none"
+                  >
+                    <option value="">Sin proveedor</option>
+                    {proveedores.map((p: any) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                  Observaciones
+                </label>
+                <textarea
+                  value={editForm.observaciones}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, observaciones: e.target.value })
+                  }
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 font-bold text-xs resize-none outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3 shrink-0">
+              <button
+                onClick={() => setEditModal(null)}
+                className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 font-black text-[10px] uppercase tracking-widest text-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarEdicion}
+                disabled={saving}
+                className="flex-1 h-12 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white font-black text-[10px] uppercase tracking-widest transition-colors"
+              >
+                {saving ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

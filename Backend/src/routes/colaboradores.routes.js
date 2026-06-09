@@ -4,7 +4,7 @@ import {
   editarColaborador, cambiarEstatus,
   subirDocumento, eliminarDocumento,
   getDepartamentos, getPuestos, crearPuesto,
-  upload,
+  upload, getAsignaciones, asignarObra, desasignarObra
 } from "../controllers/colaboradores.controller.js";
 
 const router = Router();
@@ -26,5 +26,9 @@ router.post("/",  upload.single("foto"), crearColaborador);
 router.get("/:id",           getColaborador);
 router.put("/:id",           upload.single("foto"), editarColaborador);
 router.patch("/:id/estatus", cambiarEstatus);
+
+router.get("/:colaboradorId/asignaciones",  getAsignaciones);
+router.post("/:colaboradorId/asignar",      asignarObra);
+router.patch("/:colaboradorId/desasignar",  desasignarObra);
 
 export default router;
