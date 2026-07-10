@@ -46,6 +46,7 @@ const BANCOS = [
   "Scotiabank",
   "Inbursa",
   "Bajío",
+  "Banco Azteca",
   "Otro",
 ];
 

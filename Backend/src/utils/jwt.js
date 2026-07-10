@@ -11,7 +11,7 @@ export const generateAccessToken = (user) => {
       role: user.role,
     },
     ACCESS_SECRET,
-    { expiresIn: "1h" } // token corto
+    { expiresIn: "5h" } // token corto
   );
 };
 

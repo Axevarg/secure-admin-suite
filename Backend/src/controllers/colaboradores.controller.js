@@ -510,25 +510,27 @@ export const subirDocumento = async (req, res) => {
     const url =
       `/uploads/colaboradores/${req.file.filename}`;
 
-    const { rows } = await pool.query(`
-      INSERT INTO documentos_colaborador (
-        colaborador_id,
-        tipo,
-        nombre_archivo,
-        url,
-        fecha_vencimiento,
-        uploaded_by
-      )
-      VALUES ($1,$2,$3,$4,$5,$6)
-      RETURNING *
-    `, [
-      colaborador_id,
-      tipo,
-      req.file.originalname,
-      url,
-      fecha_vencimiento ?? null,
-      usuario_id ?? null,
-    ]);
+const { rows } = await pool.query(`
+  INSERT INTO documentos_colaborador (
+    colaborador_id,
+    tipo,
+    nombre_archivo,
+    url,
+    fecha_vencimiento,
+    uploaded_by
+  )
+  VALUES ($1,$2,$3,$4,$5,$6)
+  RETURNING *
+`, [
+  colaborador_id,
+  tipo,
+  req.file.originalname,
+  url,
+  fecha_vencimiento ?? null,
+  usuario_id && usuario_id.trim() !== ""
+    ? usuario_id
+    : null,
+]);
 
     res.json(rows[0]);
 

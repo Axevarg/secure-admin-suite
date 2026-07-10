@@ -144,7 +144,7 @@ const systemNav = [
         title: "Nomina",
         url: "/nomina",
         icon: Coins,
-        perm: "rh:view",
+        perm: "rh:approve",
       },
     ],
   },
