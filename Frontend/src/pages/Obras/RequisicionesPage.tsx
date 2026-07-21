@@ -33,6 +33,8 @@ interface Insumo {
   descripcion: string;
   unidad: string;
   disponible: number;
+  categoria_id: number;
+  categoria: string; // "Materiales" | "Mano de Obra" | "Herramienta" | "Equipo"
 }
 
 interface DetalleNuevo {
@@ -46,6 +48,9 @@ const FILA_VACIA: DetalleNuevo = {
   cantidad: 1,
   fecha_requerida: "",
 };
+
+// Orden fijo de categorías (independiente de cómo vengan de la BD)
+const ORDEN_CATEGORIAS = ["Materiales", "Mano de Obra", "Herramienta", "Equipo"];
 
 const estadoStyle: Record<string, string> = {
   borrador: "bg-slate-100 text-slate-500 border-slate-200",
@@ -67,8 +72,11 @@ export default function RequisicionesPage() {
   const [notas, setNotas] = useState("");
   const [detalles, setDetalles] = useState<DetalleNuevo[]>([{ ...FILA_VACIA }]);
   const [search, setSearch] = useState(""); // Buscador del modal (Insumos)
-  const [globalSearch, setGlobalSearch] = useState(""); // ⭐ NUEVO: Buscador de la tabla
+  const [globalSearch, setGlobalSearch] = useState(""); // Buscador de la tabla
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
+
+  // ⭐ NUEVO: categoría activa dentro del modal (aplica a todas las filas)
+  const [categoriaActiva, setCategoriaActiva] = useState<string>("Materiales");
 
   const loadData = async () => {
     setLoading(true);
@@ -90,15 +98,26 @@ export default function RequisicionesPage() {
     if (id) loadData();
   }, [id]);
 
-const filteredReqs = reqs.filter((r) => {
-  const s = globalSearch.toLowerCase();
+  const filteredReqs = reqs.filter((r) => {
+    const s = globalSearch.toLowerCase();
 
-  return (
-    (r.folio?.toLowerCase() || "").includes(s) ||
-    (r.partida?.toLowerCase() || "").includes(s) ||
-    (r.solicitante?.toLowerCase() || "").includes(s)
-  );
-});
+    return (
+      (r.folio?.toLowerCase() || "").includes(s) ||
+      (r.partida?.toLowerCase() || "").includes(s) ||
+      (r.solicitante?.toLowerCase() || "").includes(s)
+    );
+  });
+
+  // ⭐ NUEVO: categorías realmente presentes en el catálogo de la obra,
+  // respetando el orden fijo y agregando cualquier categoría extra al final
+  const categoriasDisponibles = [
+    ...ORDEN_CATEGORIAS.filter((c) =>
+      insumos.some((i) => i.categoria === c)
+    ),
+    ...Array.from(new Set(insumos.map((i) => i.categoria))).filter(
+      (c) => c && !ORDEN_CATEGORIAS.includes(c)
+    ),
+  ];
 
   const abrirCrear = () => {
     setModoEditar(false);
@@ -106,6 +125,7 @@ const filteredReqs = reqs.filter((r) => {
     setPartida("");
     setNotas("");
     setDetalles([{ ...FILA_VACIA }]);
+    setCategoriaActiva("Materiales");
     setShowModal(true);
   };
 
@@ -127,6 +147,7 @@ const filteredReqs = reqs.filter((r) => {
           fecha_requerida: d.fecha_requerida?.slice(0, 10) ?? "",
         }))
       );
+      setCategoriaActiva("Materiales");
       setShowModal(true);
     } catch {
       alert("Error cargando detalle");
@@ -231,10 +252,10 @@ const filteredReqs = reqs.filter((r) => {
         </Button>
       </div>
 
-      {/* ⭐ NUEVO: BARRA DE BÚSQUEDA GLOBAL */}
+      {/* BARRA DE BÚSQUEDA GLOBAL */}
       <div className="relative group">
         <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-red-600 transition-colors" size={20} />
-        <Input 
+        <Input
           placeholder="BUSCAR POR FOLIO, PARTIDA O SOLICITANTE..."
           value={globalSearch}
           onChange={(e) => setGlobalSearch(e.target.value)}
@@ -360,7 +381,7 @@ const filteredReqs = reqs.filter((r) => {
         )}
       </div>
 
-      {/* EL RESTO DEL CÓDIGO DEL MODAL SE MANTIENE IGUAL... */}
+      {/* MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-[3rem] w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-white/20">
@@ -447,6 +468,24 @@ const filteredReqs = reqs.filter((r) => {
                   </div>
                 </div>
 
+                {/* ⭐ NUEVO: TABS DE CATEGORÍA */}
+                <div className="flex flex-wrap gap-2 px-2">
+                  {categoriasDisponibles.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoriaActiva(cat)}
+                      className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${
+                        categoriaActiva === cat
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="bg-white border border-slate-100 rounded-[2rem] overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-slate-50/50 border-b border-slate-100">
@@ -464,97 +503,121 @@ const filteredReqs = reqs.filter((r) => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {detalles.map((d, i) => (
-                        <tr key={i}>
-                          <td className="p-3 pl-4">
-                            <div className="relative group">
-                              <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600 rounded-l-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                              <select
-                                value={d.insumo_id ?? ""}
-                                onChange={(e) =>
-                                  updateRow(
-                                    i,
-                                    "insumo_id",
-                                    Number(e.target.value)
-                                  )
-                                }
-                                className="w-full h-12 pl-4 pr-10 border border-slate-100 bg-slate-50/50 rounded-xl font-black text-[11px] uppercase tracking-tight text-slate-700 appearance-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-600/20 transition-all cursor-pointer shadow-sm"
-                              >
-                                <option value="" className="text-slate-400">
-                                  — SELECCIONAR DEL CATÁLOGO —
-                                </option>
-                                {insumos
-                                  .filter(
-                                    (ins) =>
-                                      !insumosSeleccionados.includes(ins.id) ||
-                                      ins.id === d.insumo_id
-                                  )
-                                  .filter(
-                                    (ins) =>
-                                      !search ||
-                                      ins.descripcion
-                                        .toLowerCase()
-                                        .includes(search.toLowerCase()) ||
-                                      ins.clave
-                                        ?.toLowerCase()
-                                        .includes(search.toLowerCase())
-                                  )
-                                  .map((ins) => (
-                                    <option
-                                      key={ins.id}
-                                      value={ins.id}
-                                      className="font-bold py-2"
-                                    >
-                                      {ins.clave} • {ins.descripcion.toUpperCase()} ({ins.unidad}) | DISP: {ins.disponible}
-                                    </option>
-                                  ))}
-                              </select>
-                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-red-600 transition-colors">
-                                <Layers size={14} />
-                              </div>
-                            </div>
-                          </td>
+                      {detalles.map((d, i) => {
+                        // Si el insumo ya elegido en esta fila pertenece a otra
+                        // categoría distinta a la activa, lo dejamos visible
+                        // igual (para no "perder" la selección al cambiar de tab)
+                        const insumoActualDeLaFila = insumos.find(
+                          (ins) => ins.id === d.insumo_id
+                        );
 
-                          <td className="p-3">
-                            <div className="relative">
-                              <Input
-                                type="number"
-                                value={d.cantidad}
-                                onChange={(e) => {
-                                  const cantidad = Number(e.target.value);
-                                  const insumo = insumos.find(
-                                    (ins) => ins.id === d.insumo_id
-                                  );
-                                  if (insumo && cantidad > insumo.disponible) {
-                                    alert(`Stock insuficiente. Disponible: ${insumo.disponible}`);
-                                    return;
+                        return (
+                          <tr key={i}>
+                            <td className="p-3 pl-4">
+                              <div className="relative group">
+                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600 rounded-l-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                                <select
+                                  value={d.insumo_id ?? ""}
+                                  onChange={(e) =>
+                                    updateRow(
+                                      i,
+                                      "insumo_id",
+                                      Number(e.target.value)
+                                    )
                                   }
-                                  updateRow(i, "cantidad", cantidad);
-                                }}
-                                className="h-12 w-28 mx-auto rounded-xl border-slate-100 bg-white font-black text-center text-sm shadow-sm focus-visible:ring-red-600/10 focus-visible:border-red-600/20"
+                                  className="w-full h-12 pl-4 pr-10 border border-slate-100 bg-slate-50/50 rounded-xl font-black text-[11px] uppercase tracking-tight text-slate-700 appearance-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-600/20 transition-all cursor-pointer shadow-sm"
+                                >
+                                  <option value="" className="text-slate-400">
+                                    — SELECCIONAR DEL CATÁLOGO ({categoriaActiva.toUpperCase()}) —
+                                  </option>
+
+                                  {/* Si esta fila ya tenía un insumo de OTRA categoría, lo mostramos primero para no perderlo */}
+                                  {insumoActualDeLaFila &&
+                                    insumoActualDeLaFila.categoria !== categoriaActiva && (
+                                      <option value={insumoActualDeLaFila.id}>
+                                        {insumoActualDeLaFila.clave} • {insumoActualDeLaFila.descripcion.toUpperCase()} ({insumoActualDeLaFila.unidad}) — {insumoActualDeLaFila.categoria.toUpperCase()}
+                                      </option>
+                                    )}
+
+                                  {insumos
+                                    .filter((ins) => ins.categoria === categoriaActiva)
+                                    .filter(
+                                      (ins) =>
+                                        !insumosSeleccionados.includes(ins.id) ||
+                                        ins.id === d.insumo_id
+                                    )
+                                    .filter(
+                                      (ins) =>
+                                        !search ||
+                                        ins.descripcion
+                                          .toLowerCase()
+                                          .includes(search.toLowerCase()) ||
+                                        ins.clave
+                                          ?.toLowerCase()
+                                          .includes(search.toLowerCase())
+                                    )
+                                    .map((ins) => (
+                                      <option
+                                        key={ins.id}
+                                        value={ins.id}
+                                        className="font-bold py-2"
+                                      >
+                                        {ins.clave} • {ins.descripcion.toUpperCase()} ({ins.unidad}) | DISP: {ins.disponible}
+                                      </option>
+                                    ))}
+                                </select>
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-red-600 transition-colors">
+                                  <Layers size={14} />
+                                </div>
+                              </div>
+                              {insumoActualDeLaFila && (
+                                <p className="text-[8px] font-black uppercase tracking-widest text-slate-300 mt-1 ml-1">
+                                  {insumoActualDeLaFila.categoria}
+                                </p>
+                              )}
+                            </td>
+
+                            <td className="p-3">
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  value={d.cantidad}
+                                  onChange={(e) => {
+                                    const cantidad = Number(e.target.value);
+                                    const insumo = insumos.find(
+                                      (ins) => ins.id === d.insumo_id
+                                    );
+                                    if (insumo && cantidad > insumo.disponible) {
+                                      alert(`Stock insuficiente. Disponible: ${insumo.disponible}`);
+                                      return;
+                                    }
+                                    updateRow(i, "cantidad", cantidad);
+                                  }}
+                                  className="h-12 w-28 mx-auto rounded-xl border-slate-100 bg-white font-black text-center text-sm shadow-sm focus-visible:ring-red-600/10 focus-visible:border-red-600/20"
+                                />
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <Input
+                                type="date"
+                                value={d.fecha_requerida}
+                                onChange={(e) =>
+                                  updateRow(i, "fecha_requerida", e.target.value)
+                                }
+                                className="h-10 rounded-xl border-slate-100 font-bold text-[10px] uppercase"
                               />
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              type="date"
-                              value={d.fecha_requerida}
-                              onChange={(e) =>
-                                updateRow(i, "fecha_requerida", e.target.value)
-                              }
-                              className="h-10 rounded-xl border-slate-100 font-bold text-[10px] uppercase"
-                            />
-                          </td>
-                          <td className="p-3 pr-4">
-                            <button
-                              onClick={() => removeRow(i)}
-                              className="text-slate-200 hover:text-red-500 transition-colors p-1"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="p-3 pr-4">
+                              <button
+                                onClick={() => removeRow(i)}
+                                className="text-slate-200 hover:text-red-500 transition-colors p-1"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

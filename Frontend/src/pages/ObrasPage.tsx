@@ -43,7 +43,7 @@ export default function Obras() {
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("todos");
   const navigate = useNavigate();
-  
+
   const canEdit = permissions.includes("obras:edit");
   const canDelete = permissions.includes("obras:delete");
   const canCreate = permissions.includes("obras:create");
@@ -58,16 +58,15 @@ export default function Obras() {
     status_id: 1,
   });
 
-useEffect(() => {
-  const storage = localStorage.getItem("permissions")
-    ? localStorage
-    : sessionStorage;
-  const stored = storage.getItem("permissions");
-  if (stored) setPermissions(JSON.parse(stored));
-  
-  loadData(); // 👈 faltaba esto
-}, []);
+  useEffect(() => {
+    const storage = localStorage.getItem("permissions")
+      ? localStorage
+      : sessionStorage;
+    const stored = storage.getItem("permissions");
+    if (stored) setPermissions(JSON.parse(stored));
 
+    loadData(); // 👈 faltaba esto
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -294,6 +293,21 @@ useEffect(() => {
           </div>
         ))}
       </div>
+
+      {/* ESTADO VACÍO */}
+      {!loading && obrasFiltradas.length === 0 && (
+        <div className="p-24 text-center bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <Building2
+            className="w-16 h-16 text-slate-100 mx-auto mb-6"
+            strokeWidth={1}
+          />
+          <p className="text-slate-300 font-black text-[11px] uppercase tracking-[0.3em]">
+            {obras.length === 0
+              ? "No tienes ninguna obra asignada"
+              : "No se encontraron obras con ese filtro"}
+          </p>
+        </div>
+      )}
 
       {/* MODAL EXPEDIENTE DE OBRA */}
       <Dialog open={showModal} onOpenChange={setShowModal}>

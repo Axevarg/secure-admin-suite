@@ -12,6 +12,8 @@ export const getStockObra = async (req, res) => {
     i.descripcion,
     i.unidad,
     i.cantidad AS presupuesto,
+    i.categoria_id,
+    c.nombre AS categoria,
 
     COALESCE((
       SELECT SUM(io.cantidad)
@@ -46,10 +48,10 @@ export const getStockObra = async (req, res) => {
     ) AS disponible
 
   FROM insumos i
+  LEFT JOIN insumo_categorias c ON c.id = i.categoria_id
   WHERE i.obra_id = $1
-    AND i.categoria_id = 1
 
-  ORDER BY i.descripcion
+  ORDER BY c.nombre, i.descripcion
 `,
       [obraId],
     );

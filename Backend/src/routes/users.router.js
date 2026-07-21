@@ -4,7 +4,10 @@ import {
   createUserByAdmin,
   updateUser,
   toggleUserStatus,
-  adminResetPassword
+  adminResetPassword,
+  getObrasList,
+  getUserObras,   // 👈 falta
+  setUserObras,   // 👈 falta
 } from "../controllers/users.controller.js";
 
 import { authMiddleware } from "../modules/auth/auth.middleware.js";
@@ -19,5 +22,8 @@ router.post("/", createUserByAdmin);
 router.put("/:id", updateUser);
 router.patch("/:id/toggle-active", toggleUserStatus);
 router.post("/:id/reset-password", adminResetPassword);
+
+router.get("/:id/obras", getUserObras);   // 👈 falta
+router.put("/:id/obras", setUserObras);   // 👈 falta
 
 export default router;
