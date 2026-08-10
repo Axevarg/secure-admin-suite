@@ -67,7 +67,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-8 max-w-[1400px] animate-in fade-in duration-500 p-2">
+    <div className="space-y-8 w-full animate-in fade-in duration-500 p-2">
 
       {/* Banner Principal SIGO */}
       <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white relative overflow-hidden shadow-2xl border-b-8 border-red-600">
@@ -101,7 +101,7 @@ export default function Dashboard() {
                 <div className={`${card.bg} ${card.accent} p-4 rounded-2xl transition-transform group-hover:scale-110 duration-300`}>
                   <Icon size={24} />
                 </div>
-                <ArrowUpRight size={20} className="text-slate-200 group-hover:text-red-600 transition-colors" />
+          
               </div>
               
               <div className="mt-6">

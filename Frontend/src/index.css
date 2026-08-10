@@ -120,6 +120,199 @@
   }
 }
 
+.birthday-print-area {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  html,
+  body,
+  #root {
+    width: 8.5in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .birthday-page {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 8.5in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .birthday-print-area,
+  .birthday-print-area * {
+    visibility: visible !important;
+  }
+
+  .birthday-print-area {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 8.5in;
+    margin: 0 !important;
+    padding: 0;
+  }
+
+  .birthday-page > canvas,
+  .birthday-page > :not(.birthday-print-area) {
+    display: none !important;
+  }
+
+  .birthday-print-card {
+    position: relative;
+    display: flex;
+    box-sizing: border-box;
+    width: 8.5in;
+    height: 11in;
+    min-height: 11in;
+    margin: 0;
+    padding: 0.4in 0.65in 0.8in;
+    overflow: hidden;
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    color: #172033;
+    background:
+      radial-gradient(circle at 8% 12%, rgba(245, 158, 11, 0.2) 0 70px, transparent 72px),
+      radial-gradient(circle at 92% 85%, rgba(239, 68, 68, 0.16) 0 100px, transparent 102px),
+      linear-gradient(145deg, #fffaf0 0%, #ffffff 48%, #fff1f2 100%);
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .birthday-print-card:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .birthday-print-confetti {
+    width: 100%;
+    color: #f59e0b;
+    font-size: 22px;
+    letter-spacing: 12px;
+  }
+
+  .birthday-print-kicker {
+    margin-top: 18px;
+    color: #dc2626;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 4px;
+  }
+
+  .birthday-print-photo-wrap {
+    box-sizing: border-box;
+    width: 3in;
+    height: 3in;
+    flex: 0 0 3in;
+    margin-top: 22px;
+    padding: 10px;
+    border: 5px solid #f59e0b;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 18px 45px rgba(120, 53, 15, 0.18);
+  }
+
+  .birthday-print-photo-wrap img,
+  .birthday-print-initials {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .birthday-print-initials {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 72px;
+    font-weight: 900;
+    background: linear-gradient(145deg, #f59e0b, #ef4444);
+  }
+
+  .birthday-print-small {
+    margin-top: 22px;
+    color: #f59e0b;
+    font-size: 25px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+  }
+
+  .birthday-print-card h1 {
+    max-width: 7in;
+    margin-top: 8px;
+    font-size: 42px;
+    font-weight: 900;
+    line-height: 1.05;
+    text-transform: uppercase;
+  }
+
+  .birthday-print-position {
+    margin-top: 8px;
+    color: #dc2626;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .birthday-print-message {
+    max-width: 6.2in;
+    margin-top: 16px;
+    color: #64748b;
+    font-size: 18px;
+    line-height: 1.6;
+  }
+
+  .birthday-print-date {
+    margin-top: 18px;
+    padding: 12px 24px;
+    border-radius: 999px;
+    color: white;
+    font-size: 15px;
+    font-weight: 900;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #f59e0b, #ef4444);
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .birthday-print-footer {
+    position: absolute;
+    right: 0.65in;
+    bottom: 0.32in;
+    left: 0.65in;
+    margin: 0;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

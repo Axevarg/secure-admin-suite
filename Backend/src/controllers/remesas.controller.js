@@ -11,10 +11,15 @@ export const getRequisicionesSinRemesa = async (req, res) => {
         r.folio,
         o.nombre AS obra,
         r.partida,
-        r.fecha
+        r.fecha,
+        r.cotizacion_url,
+        r.requiere_factura,
+        r.forma_pago,
+        r.condiciones_pago
       FROM requisiciones r
       LEFT JOIN obras o ON o.id = r.obra_id
-      WHERE r.estado = 'autorizada'
+      WHERE r.estado = 'cotizada'
+      AND r.cotizacion_url IS NOT NULL
       AND NOT EXISTS (
         SELECT 1 FROM remesas rm 
         WHERE rm.requisicion_id = r.id
@@ -73,7 +78,7 @@ export const generarRemesas = async (req, res) => {
     await client.query("BEGIN");
 
     const reqCheck = await client.query(
-      "SELECT * FROM requisiciones WHERE id=$1 AND estado='autorizada'",
+      "SELECT * FROM requisiciones WHERE id=$1 AND estado='cotizada'",
       [reqId],
     );
 
@@ -343,74 +348,100 @@ export const marcarRecibida = async (req, res) => {
   }
 };
 
-export const pagarRemesaConBanco = async (req, res) => {
+//////////////////////////////////////////////////////////
+// MARCAR PENDIENTE DE PAGO (autorizada -> pendiente_pago)
+//////////////////////////////////////////////////////////
+export const marcarPendientePago = async (req, res) => {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
     const { id } = req.params;
+    const { usuario_id, concepto } = req.body;
 
-    const { cuenta_id, concepto, fecha_movimiento, usuario_id } = req.body;
-
-    const created_by = usuario_id;
-
-    // Obtener remesa
+    // Traemos la remesa + proveedor + condiciones de pago de la requisición origen
     const remesaRes = await client.query(
       `
-      SELECT r.*, p.nombre AS proveedor
+      SELECT 
+        r.*,
+        STRING_AGG(DISTINCT p.nombre, ', ') AS proveedor,
+        MAX(rd.proveedor_id) AS proveedor_id,
+        req.forma_pago AS req_forma_pago,
+        req.condiciones_pago AS req_condiciones_pago,
+        req.requiere_factura AS req_requiere_factura
       FROM remesas r
-      LEFT JOIN proveedores p ON p.id = r.proveedor_id
+      LEFT JOIN remesa_detalles rd ON rd.remesa_id = r.id
+      LEFT JOIN proveedores p ON p.id = rd.proveedor_id
+      LEFT JOIN requisiciones req ON req.id = r.requisicion_id
       WHERE r.id = $1
+      GROUP BY r.id, req.forma_pago, req.condiciones_pago, req.requiere_factura
       `,
       [id],
     );
 
     if (!remesaRes.rows.length) {
-      throw new Error("Remesa no encontrada");
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Remesa no encontrada" });
     }
 
     const remesa = remesaRes.rows[0];
 
-    // Crear movimiento bancario
-    await client.query(
-      `
-      INSERT INTO movimientos_bancarios (
-        tipo,
-        cuenta_id,
-        monto,
-        concepto,
-        fecha_movimiento,
-        estado,
-        observaciones,
-        created_by
-      )
-      VALUES (
-        'gasto',
-        $1,
-        $2,
-        $3,
-        $4,
-        'confirmado',
-        $5,
-        $6
-      )
-      `,
-      [
-        cuenta_id,
-        remesa.monto_total,
-        concepto || `Pago remesa #${remesa.folio}`,
-        fecha_movimiento || new Date(),
-        `Pago al proveedor ${remesa.proveedor}`,
-        created_by,
-      ],
-    );
+    if (remesa.estado !== "autorizada") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "Solo se puede marcar como pendiente de pago una remesa autorizada",
+      });
+    }
 
-    // Cambiar remesa a pagada
+    // Armamos observaciones incluyendo lo que ya se capturó en la cotización
+    const partesObservaciones = [
+      remesa.proveedor ? `Proveedor: ${remesa.proveedor}` : null,
+      remesa.req_requiere_factura !== null
+        ? `Requiere factura: ${remesa.req_requiere_factura ? "Sí" : "No"}`
+        : null,
+      remesa.req_condiciones_pago ? `Condiciones: ${remesa.req_condiciones_pago}` : null,
+    ].filter(Boolean);
+
+    const observaciones = `Remesa marcada como pendiente de pago${
+      partesObservaciones.length ? " — " + partesObservaciones.join(" | ") : ""
+    }`;
+
+    // Registramos el movimiento en estado 'pendiente', sin cuenta asignada aún,
+    // heredando forma_pago desde la requisición cotizada
+    const movResult = await client.query(
+  `
+  INSERT INTO movimientos_bancarios (
+    tipo,
+    cuenta_id,
+    monto,
+    concepto,
+    fecha_movimiento,
+    estado,
+    observaciones,
+    created_by,
+    proveedor_id,
+    forma_pago,
+    remesa_id
+  )
+  VALUES ('gasto', NULL, $1, $2, NOW(), 'pendiente', $3, $4, $5, $6, $7)
+  RETURNING *
+  `,
+  [
+    remesa.monto_total,
+    concepto || `Pago remesa HGZ.${remesa.folio}`,
+    observaciones,
+    usuario_id,
+    remesa.proveedor_id,
+    remesa.req_forma_pago || null,
+    remesa.id, // ← nuevo
+  ],
+);
+
     const updated = await client.query(
       `
       UPDATE remesas
-      SET estado = 'pagada',
+      SET estado = 'pendiente_pago',
           updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -419,13 +450,15 @@ export const pagarRemesaConBanco = async (req, res) => {
     );
 
     await client.query("COMMIT");
-
-    res.json(updated.rows[0]);
+    res.json({
+      remesa: updated.rows[0],
+      movimiento: movResult.rows[0],
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({
-      msg: "Error al pagar remesa",
+      message: "Error al marcar la remesa como pendiente de pago",
     });
   } finally {
     client.release();

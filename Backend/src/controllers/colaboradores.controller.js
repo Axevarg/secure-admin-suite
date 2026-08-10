@@ -752,3 +752,67 @@ export const desasignarObra = async (req, res) => {
     res.status(500).json({ msg: "Error al desasignar" });
   }
 };
+
+
+// ── CUMPLEAÑOS ───────────────────────────────────────────
+export const getCumpleanios = async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        c.id,
+        c.nombre,
+        c.apellido_paterno,
+        c.apellido_materno,
+        c.fecha_nacimiento,
+        c.foto_url,
+        c.estatus,
+        c.telefono,
+        d.nombre AS departamento,
+        p.nombre AS puesto
+      FROM colaboradores c
+      LEFT JOIN departamentos d ON d.id = c.departamento_id
+      LEFT JOIN puestos p ON p.id = c.puesto_id
+      WHERE c.fecha_nacimiento IS NOT NULL
+        AND c.estatus != 'baja'
+      ORDER BY c.nombre
+    `);
+
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const conCalculo = rows.map((c) => {
+      const nacimiento = new Date(c.fecha_nacimiento);
+      const mes = nacimiento.getUTCMonth();
+      const dia = nacimiento.getUTCDate();
+
+      let proximo = new Date(hoy.getFullYear(), mes, dia);
+      if (proximo < hoy) {
+        proximo = new Date(hoy.getFullYear() + 1, mes, dia);
+      }
+
+      const diasFaltantes = Math.round(
+        (proximo.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      const edadActual = hoy.getFullYear() - nacimiento.getUTCFullYear();
+      const edadCumple = proximo.getFullYear() - nacimiento.getUTCFullYear();
+
+      return {
+        ...c,
+        dia,
+        mes: mes + 1,
+        dias_faltantes: diasFaltantes,
+        es_hoy: diasFaltantes === 0,
+        edad_actual: edadActual,
+        edad_cumple: edadCumple,
+      };
+    });
+
+    conCalculo.sort((a, b) => a.dias_faltantes - b.dias_faltantes);
+
+    res.json(conCalculo);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Error al obtener cumpleaños" });
+  }
+};

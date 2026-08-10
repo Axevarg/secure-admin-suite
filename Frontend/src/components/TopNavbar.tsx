@@ -146,29 +146,7 @@ export function TopNavbar({ darkMode, onToggleDark }: TopNavbarProps) {
       <div className="flex items-center gap-2">
 
 
-        {/* NOTIFICATIONS */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl hover:bg-slate-100 text-slate-400 hover:text-red-600 relative transition-all outline-none ring-0 focus-visible:ring-0">
-              <Bell className="w-4 h-4" strokeWidth={2.5} />
-              {notifications.some(n => n.unread) && (
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-600 rounded-full border-2 border-white ring-2 ring-red-100" />
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80 p-2 rounded-[2rem] border-slate-100 shadow-2xl">
-            <DropdownMenuLabel className="font-black text-[10px] uppercase tracking-widest text-slate-900 p-4">Notificaciones Recientes</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <div className="p-1">
-              {notifications.map((n) => (
-                <DropdownMenuItem key={n.id} className="p-4 rounded-2xl flex flex-col items-start gap-1 mb-1 focus:bg-slate-50 cursor-pointer">
-                  <p className={`text-[11px] uppercase tracking-tight ${n.unread ? "font-black text-slate-900" : "font-bold text-slate-500"}`}>{n.text}</p>
-                  <p className="text-[9px] font-black text-red-600/50 uppercase italic">{n.time} atrás</p>
-                </DropdownMenuItem>
-              ))}
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+
 
         <div className="h-6 w-[1px] bg-slate-100 mx-1" />
 

@@ -2,9 +2,15 @@ import { pool } from "../config/db.js";
 
 /* =====================================================
    🔥 VALIDAR STOCK DISPONIBLE POR OBRA
+   Solo aplica a renglones tipo="insumo".
+   Los renglones tipo="indirecto" no tienen stock fijo:
+   solo verificamos que el concepto exista en la obra.
 ===================================================== */
 const validarStockDisponible = async (client, obraId, detalles) => {
-  for (const item of detalles) {
+  const renglonesInsumo = detalles.filter((d) => d.tipo !== "indirecto");
+  const renglonesIndirecto = detalles.filter((d) => d.tipo === "indirecto");
+
+  for (const item of renglonesInsumo) {
     const stock = await client.query(
       `
       SELECT
@@ -41,7 +47,7 @@ const validarStockDisponible = async (client, obraId, detalles) => {
 
       GROUP BY i.descripcion, i.cantidad
     `,
-      [item.insumo_id, obraId],
+      [item.item_id, obraId],
     );
 
     if (stock.rows.length === 0)
@@ -55,6 +61,15 @@ const validarStockDisponible = async (client, obraId, detalles) => {
         `Stock insuficiente de "${descripcion}". Disponible: ${disponible}`,
       );
     }
+  }
+
+  for (const item of renglonesIndirecto) {
+    const check = await client.query(
+      `SELECT id FROM indirectos_obra WHERE id = $1 AND obra_id = $2`,
+      [item.item_id, obraId],
+    );
+    if (check.rows.length === 0)
+      throw new Error("El concepto de indirecto no existe en esta obra");
   }
 };
 
@@ -90,8 +105,10 @@ export const getRequisicionesObra = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
 /* =====================================================
    CREAR REQUISICION + DETALLES
+   detalles: [{ tipo: "insumo"|"indirecto", item_id, cantidad, fecha_requerida }]
 ===================================================== */
 export const crearRequisicion = async (req, res) => {
   const client = await pool.connect();
@@ -107,9 +124,17 @@ export const crearRequisicion = async (req, res) => {
     if (!detalles || detalles.length === 0)
       throw new Error("Debe agregar al menos un insumo");
 
-    /* VALIDAR DUPLICADOS */
-    const ids = detalles.map((d) => d.insumo_id);
-    if (ids.length !== new Set(ids).size)
+    /* NORMALIZAR TIPO (por compatibilidad con payloads viejos que mandaban insumo_id) */
+    const detallesNorm = detalles.map((d) => ({
+      tipo: d.tipo === "indirecto" ? "indirecto" : "insumo",
+      item_id: d.item_id ?? d.insumo_id,
+      cantidad: d.cantidad,
+      fecha_requerida: d.fecha_requerida || null,
+    }));
+
+    /* VALIDAR DUPLICADOS (por tipo + id, un mismo id puede repetirse entre tablas distintas) */
+    const claves = detallesNorm.map((d) => `${d.tipo}:${d.item_id}`);
+    if (claves.length !== new Set(claves).size)
       throw new Error("No puedes repetir insumos");
 
     /* GENERAR FOLIO SEGURO */
@@ -133,22 +158,24 @@ export const crearRequisicion = async (req, res) => {
 
     const requisicionId = reqResult.rows[0].id;
 
-    /* 🔥 VALIDAR PRESUPUESTO */
-    await validarStockDisponible(client, obraId, detalles);
+    /* 🔥 VALIDAR PRESUPUESTO / EXISTENCIA */
+    await validarStockDisponible(client, obraId, detallesNorm);
 
     /* INSERTAR DETALLES */
-    for (const item of detalles) {
+    for (const item of detallesNorm) {
       await client.query(
         `
         INSERT INTO requisicion_detalle
-        (requisicion_id, insumo_id, cantidad, fecha_requerida)
-        VALUES ($1,$2,$3,$4)
+        (requisicion_id, insumo_id, indirecto_id, tipo, cantidad, fecha_requerida)
+        VALUES ($1,$2,$3,$4,$5,$6)
       `,
         [
           requisicionId,
-          item.insumo_id,
+          item.tipo === "insumo" ? item.item_id : null,
+          item.tipo === "indirecto" ? item.item_id : null,
+          item.tipo,
           item.cantidad,
-          item.fecha_requerida || null,
+          item.fecha_requerida,
         ],
       );
     }
@@ -197,8 +224,11 @@ export const getDetalleRequisicion = async (req, res) => {
         d.id,
         d.cantidad,
         d.fecha_requerida,
-        i.descripcion,
-        i.unidad,
+        d.tipo,
+        d.insumo_id,
+        d.indirecto_id,
+        COALESCE(i.descripcion, ind.nombre) AS descripcion,
+        COALESCE(i.unidad, ind.unidad) AS unidad,
 
         i.cantidad AS presupuesto,
 
@@ -210,7 +240,8 @@ export const getDetalleRequisicion = async (req, res) => {
         ),0) AS extras
 
       FROM requisicion_detalle d
-      JOIN insumos i ON i.id = d.insumo_id
+      LEFT JOIN insumos i ON i.id = d.insumo_id
+      LEFT JOIN indirectos_obra ind ON ind.id = d.indirecto_id
       JOIN requisiciones r ON r.id = d.requisicion_id
 
       WHERE d.requisicion_id = $1
@@ -295,13 +326,20 @@ export const editarRequisicion = async (req, res) => {
     }
 
     if (detalles && detalles.length > 0) {
+      const detallesNorm = detalles.map((d) => ({
+        tipo: d.tipo === "indirecto" ? "indirecto" : "insumo",
+        item_id: d.item_id ?? d.insumo_id,
+        cantidad: d.cantidad,
+        fecha_requerida: d.fecha_requerida || null,
+      }));
+
       /* VALIDAR DUPLICADOS */
-      const ids = detalles.map((d) => d.insumo_id);
-      if (ids.length !== new Set(ids).size)
+      const claves = detallesNorm.map((d) => `${d.tipo}:${d.item_id}`);
+      if (claves.length !== new Set(claves).size)
         throw new Error("No puedes repetir insumos");
 
-      /* 🔥 VALIDAR PRESUPUESTO */
-      await validarStockDisponible(client, obraId, detalles);
+      /* 🔥 VALIDAR PRESUPUESTO / EXISTENCIA */
+      await validarStockDisponible(client, obraId, detallesNorm);
 
       /* REEMPLAZAR DETALLES */
       await client.query(
@@ -309,14 +347,21 @@ export const editarRequisicion = async (req, res) => {
         [id],
       );
 
-      for (const item of detalles) {
+      for (const item of detallesNorm) {
         await client.query(
           `
           INSERT INTO requisicion_detalle
-          (requisicion_id, insumo_id, cantidad, fecha_requerida)
-          VALUES ($1,$2,$3,$4)
+          (requisicion_id, insumo_id, indirecto_id, tipo, cantidad, fecha_requerida)
+          VALUES ($1,$2,$3,$4,$5,$6)
         `,
-          [id, item.insumo_id, item.cantidad, item.fecha_requerida || null],
+          [
+            id,
+            item.tipo === "insumo" ? item.item_id : null,
+            item.tipo === "indirecto" ? item.item_id : null,
+            item.tipo,
+            item.cantidad,
+            item.fecha_requerida,
+          ],
         );
       }
     }

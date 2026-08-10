@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "@/lib/axios";
 import { Button } from "@/components/ui/button";
@@ -37,20 +37,32 @@ interface Insumo {
   categoria: string; // "Materiales" | "Mano de Obra" | "Herramienta" | "Equipo"
 }
 
+interface IndirectoCatalogo {
+  id: number;
+  nombre: string;
+  unidad: string | null;
+  costo_unitario: number;
+}
+
+type Tipo = "insumo" | "indirecto";
+
 interface DetalleNuevo {
-  insumo_id: number | null;
+  tipo: Tipo;
+  item_id: number | null;
   cantidad: number;
   fecha_requerida: string;
 }
 
 const FILA_VACIA: DetalleNuevo = {
-  insumo_id: null,
+  tipo: "insumo",
+  item_id: null,
   cantidad: 1,
   fecha_requerida: "",
 };
 
 // Orden fijo de categorías (independiente de cómo vengan de la BD)
 const ORDEN_CATEGORIAS = ["Materiales", "Mano de Obra", "Herramienta", "Equipo"];
+const CATEGORIA_INDIRECTOS = "Indirectos";
 
 const estadoStyle: Record<string, string> = {
   borrador: "bg-slate-100 text-slate-500 border-slate-200",
@@ -60,10 +72,133 @@ const estadoStyle: Record<string, string> = {
   entregada: "bg-blue-50 text-blue-700 border-blue-100",
 };
 
+const money = (n: number) =>
+  new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+  }).format(n || 0);
+
+interface OpcionSelector {
+  id: number;
+  label: string;
+  sublabel?: string;
+}
+
+// Dropdown con buscador propio (reemplaza el <select> nativo, que se vuelve
+// inmanejable cuando el catálogo tiene decenas/cientos de items)
+function ItemSelector({
+  value,
+  displayLabel,
+  placeholder,
+  options,
+  onSelect,
+}: {
+  value: number | null;
+  displayLabel: string;
+  placeholder: string;
+  options: OpcionSelector[];
+  onSelect: (id: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtradas = options.filter((o) => {
+    const q = query.toLowerCase();
+    return (
+      !q ||
+      o.label.toLowerCase().includes(q) ||
+      o.sublabel?.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="relative group" ref={ref}>
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600 rounded-l-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full h-12 pl-4 pr-10 border border-slate-100 bg-slate-50/50 rounded-xl font-black text-[11px] uppercase tracking-tight text-slate-700 text-left truncate focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-600/20 transition-all cursor-pointer shadow-sm"
+      >
+        {displayLabel || (
+          <span className="text-slate-400">{placeholder}</span>
+        )}
+      </button>
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-red-600 transition-colors">
+        <Layers size={14} />
+      </div>
+
+      {open && (
+        <div className="absolute z-30 mt-2 w-full min-w-[320px] bg-white border border-slate-100 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-slate-50">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="BUSCAR..."
+                className="w-full h-9 pl-9 pr-3 bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none"
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {filtradas.length === 0 && (
+              <p className="p-4 text-[9px] font-black uppercase text-slate-300 text-center tracking-widest">
+                Sin resultados
+              </p>
+            )}
+            {filtradas.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => {
+                  onSelect(o.id);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className={`w-full text-left px-4 py-2.5 transition-colors hover:bg-slate-50 ${
+                  o.id === value ? "bg-red-50" : ""
+                }`}
+              >
+                <p
+                  className={`text-[10px] font-black uppercase tracking-tight ${
+                    o.id === value ? "text-red-600" : "text-slate-700"
+                  }`}
+                >
+                  {o.label}
+                </p>
+                {o.sublabel && (
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-0.5">
+                    {o.sublabel}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RequisicionesPage() {
   const { id } = useParams();
   const [reqs, setReqs] = useState<Requisicion[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
+  const [indirectos, setIndirectos] = useState<IndirectoCatalogo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modoEditar, setModoEditar] = useState(false);
@@ -71,22 +206,23 @@ export default function RequisicionesPage() {
   const [partida, setPartida] = useState("");
   const [notas, setNotas] = useState("");
   const [detalles, setDetalles] = useState<DetalleNuevo[]>([{ ...FILA_VACIA }]);
-  const [search, setSearch] = useState(""); // Buscador del modal (Insumos)
   const [globalSearch, setGlobalSearch] = useState(""); // Buscador de la tabla
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
 
-  // ⭐ NUEVO: categoría activa dentro del modal (aplica a todas las filas)
+  // ⭐ categoría activa dentro del modal (aplica a todas las filas)
   const [categoriaActiva, setCategoriaActiva] = useState<string>("Materiales");
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [r, stock] = await Promise.all([
+      const [r, stock, ind] = await Promise.all([
         api.get(`/requisiciones/obra/${id}`),
         api.get(`/stock/obra/${id}`),
+        api.get(`/indirectos/obra/${id}`),
       ]);
       setReqs(Array.isArray(r.data) ? r.data : []);
       setInsumos(stock.data ?? []);
+      setIndirectos(ind.data?.items ?? []);
     } catch {
       console.error("Error al sincronizar con SIGO");
     } finally {
@@ -108,8 +244,9 @@ export default function RequisicionesPage() {
     );
   });
 
-  // ⭐ NUEVO: categorías realmente presentes en el catálogo de la obra,
-  // respetando el orden fijo y agregando cualquier categoría extra al final
+  // ⭐ categorías realmente presentes en el catálogo de la obra,
+  // respetando el orden fijo, agregando cualquier categoría extra al final,
+  // y siempre incluyendo Indirectos.
   const categoriasDisponibles = [
     ...ORDEN_CATEGORIAS.filter((c) =>
       insumos.some((i) => i.categoria === c)
@@ -117,6 +254,7 @@ export default function RequisicionesPage() {
     ...Array.from(new Set(insumos.map((i) => i.categoria))).filter(
       (c) => c && !ORDEN_CATEGORIAS.includes(c)
     ),
+    CATEGORIA_INDIRECTOS,
   ];
 
   const abrirCrear = () => {
@@ -138,14 +276,24 @@ export default function RequisicionesPage() {
       setReqEditId(req.id);
       setPartida(requisicion.partida);
       setDetalles(
-        dets.map((d: any) => ({
-          insumo_id:
-            d.insumo_id ??
-            insumos.find((i) => i.descripcion === d.descripcion)?.id ??
-            null,
-          cantidad: d.cantidad,
-          fecha_requerida: d.fecha_requerida?.slice(0, 10) ?? "",
-        }))
+        dets.map((d: any) => {
+          const tipo: Tipo = d.tipo === "indirecto" ? "indirecto" : "insumo";
+          const item_id =
+            tipo === "indirecto"
+              ? d.indirecto_id ??
+                indirectos.find((x) => x.nombre === d.descripcion)?.id ??
+                null
+              : d.insumo_id ??
+                insumos.find((i) => i.descripcion === d.descripcion)?.id ??
+                null;
+
+          return {
+            tipo,
+            item_id,
+            cantidad: d.cantidad,
+            fecha_requerida: d.fecha_requerida?.slice(0, 10) ?? "",
+          };
+        })
       );
       setCategoriaActiva("Materiales");
       setShowModal(true);
@@ -166,9 +314,17 @@ export default function RequisicionesPage() {
       return copy;
     });
 
+  // Selecciona un item (insumo o indirecto) en una fila, fijando tipo + id juntos
+  const seleccionarItem = (i: number, itemId: number, tipo: Tipo) =>
+    setDetalles((prev) => {
+      const copy = [...prev];
+      copy[i] = { ...copy[i], item_id: itemId, tipo };
+      return copy;
+    });
+
   const guardar = async () => {
     if (!partida.trim()) return alert("La partida es obligatoria");
-    const filasValidas = detalles.filter((d) => d.insumo_id !== null);
+    const filasValidas = detalles.filter((d) => d.item_id !== null);
     if (filasValidas.length === 0) return alert("Agrega al menos un insumo");
 
     try {
@@ -202,7 +358,15 @@ export default function RequisicionesPage() {
     }
   };
 
-  const insumosSeleccionados = detalles.map((d) => d.insumo_id).filter(Boolean);
+  const insumoIdsSeleccionados = detalles
+    .filter((d) => d.tipo === "insumo")
+    .map((d) => d.item_id)
+    .filter(Boolean);
+
+  const indirectoIdsSeleccionados = detalles
+    .filter((d) => d.tipo === "indirecto")
+    .map((d) => d.item_id)
+    .filter(Boolean);
 
   const cerrarModal = () => {
     setMotivoRechazo(null);
@@ -383,8 +547,13 @@ export default function RequisicionesPage() {
 
       {/* MODAL */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-white/20">
+<div
+  className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300"
+  style={{
+    marginTop: "0px",
+  }}
+>
+          <div className="bg-white rounded-[1rem] w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-white/20">
             {/* MODAL HEADER */}
             <div className="bg-slate-900 p-10 text-white relative shrink-0">
               <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600" />
@@ -457,18 +626,12 @@ export default function RequisicionesPage() {
                     Listado de Insumos Requeridos
                   </h3>
                   <div className="h-px flex-1 bg-slate-50 mx-4" />
-                  <div className="relative w-64 group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
-                    <Input
-                      placeholder="FILTRAR CATÁLOGO..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="pl-10 h-9 border-none bg-slate-50 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none"
-                    />
-                  </div>
+                  <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
+                    Cada renglón trae su propio buscador
+                  </p>
                 </div>
 
-                {/* ⭐ NUEVO: TABS DE CATEGORÍA */}
+                {/* TABS DE CATEGORÍA */}
                 <div className="flex flex-wrap gap-2 px-2">
                   {categoriasDisponibles.map((cat) => (
                     <button
@@ -486,11 +649,23 @@ export default function RequisicionesPage() {
                   ))}
                 </div>
 
-                <div className="bg-white border border-slate-100 rounded-[2rem] overflow-hidden">
+                {categoriaActiva === CATEGORIA_INDIRECTOS &&
+                  indirectos.length === 0 && (
+                    <div className="mx-2 bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-3 items-start">
+                      <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-[10px] font-bold text-amber-700 leading-relaxed uppercase tracking-wide">
+                        Aún no hay conceptos capturados en Indirectos. Agrega
+                        alguno primero desde esa pestaña (tintas, escobas,
+                        trapos, etc.) para poder solicitarlo aquí.
+                      </p>
+                    </div>
+                  )}
+
+                <div className="bg-white border border-slate-100 rounded-[2rem] overflow-visible">
                   <table className="w-full">
-                    <thead className="bg-slate-50/50 border-b border-slate-100">
+                    <thead className="bg-slate-50/50 border-b border-slate-100 rounded-t-[2rem]">
                       <tr>
-                        <th className="font-black text-[9px] uppercase text-left p-4 tracking-widest text-slate-400">
+                        <th className="font-black text-[9px] uppercase text-left p-4 tracking-widest text-slate-400 rounded-tl-[2rem]">
                           Insumo / Unidad
                         </th>
                         <th className="font-black text-[9px] uppercase text-center p-4 tracking-widest text-slate-400 w-32">
@@ -504,75 +679,99 @@ export default function RequisicionesPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {detalles.map((d, i) => {
-                        // Si el insumo ya elegido en esta fila pertenece a otra
-                        // categoría distinta a la activa, lo dejamos visible
-                        // igual (para no "perder" la selección al cambiar de tab)
-                        const insumoActualDeLaFila = insumos.find(
-                          (ins) => ins.id === d.insumo_id
-                        );
+                        // Info normalizada del item ya seleccionado en esta fila,
+                        // sin importar si es insumo o indirecto ni la categoría activa
+                        const insumoDeLaFila =
+                          d.tipo === "insumo"
+                            ? insumos.find((ins) => ins.id === d.item_id)
+                            : undefined;
+                        const indirectoDeLaFila =
+                          d.tipo === "indirecto"
+                            ? indirectos.find((ind) => ind.id === d.item_id)
+                            : undefined;
+
+                        const esOtraCategoria =
+                          (insumoDeLaFila &&
+                            insumoDeLaFila.categoria !== categoriaActiva) ||
+                          (indirectoDeLaFila &&
+                            categoriaActiva !== CATEGORIA_INDIRECTOS);
+
+                        // Opciones que se muestran en el buscador de esta fila
+                        const opciones: OpcionSelector[] =
+                          categoriaActiva === CATEGORIA_INDIRECTOS
+                            ? [
+                                ...(esOtraCategoria && indirectoDeLaFila
+                                  ? [
+                                      {
+                                        id: indirectoDeLaFila.id,
+                                        label: `${indirectoDeLaFila.nombre.toUpperCase()} — INDIRECTOS`,
+                                        sublabel: indirectoDeLaFila.unidad || "—",
+                                      },
+                                    ]
+                                  : []),
+                                ...indirectos
+                                  .filter(
+                                    (ind) =>
+                                      !indirectoIdsSeleccionados.includes(ind.id) ||
+                                      (d.tipo === "indirecto" && ind.id === d.item_id)
+                                  )
+                                  .map((ind) => ({
+                                    id: ind.id,
+                                    label: ind.nombre.toUpperCase(),
+                                    sublabel: `${ind.unidad || "—"} • Costo ref: ${money(ind.costo_unitario)}`,
+                                  })),
+                              ]
+                            : [
+                                ...(esOtraCategoria && insumoDeLaFila
+                                  ? [
+                                      {
+                                        id: insumoDeLaFila.id,
+                                        label: `${insumoDeLaFila.clave} • ${insumoDeLaFila.descripcion.toUpperCase()} — ${insumoDeLaFila.categoria.toUpperCase()}`,
+                                        sublabel: insumoDeLaFila.unidad,
+                                      },
+                                    ]
+                                  : []),
+                                ...insumos
+                                  .filter((ins) => ins.categoria === categoriaActiva)
+                                  .filter(
+                                    (ins) =>
+                                      !insumoIdsSeleccionados.includes(ins.id) ||
+                                      (d.tipo === "insumo" && ins.id === d.item_id)
+                                  )
+                                  .map((ins) => ({
+                                    id: ins.id,
+                                    label: `${ins.clave} • ${ins.descripcion.toUpperCase()}`,
+                                    sublabel: `${ins.unidad} • Disp: ${ins.disponible}`,
+                                  })),
+                              ];
+
+                        const displayLabel = insumoDeLaFila
+                          ? `${insumoDeLaFila.clave} • ${insumoDeLaFila.descripcion.toUpperCase()}`
+                          : indirectoDeLaFila
+                            ? indirectoDeLaFila.nombre.toUpperCase()
+                            : "";
 
                         return (
                           <tr key={i}>
                             <td className="p-3 pl-4">
-                              <div className="relative group">
-                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600 rounded-l-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                                <select
-                                  value={d.insumo_id ?? ""}
-                                  onChange={(e) =>
-                                    updateRow(
-                                      i,
-                                      "insumo_id",
-                                      Number(e.target.value)
-                                    )
-                                  }
-                                  className="w-full h-12 pl-4 pr-10 border border-slate-100 bg-slate-50/50 rounded-xl font-black text-[11px] uppercase tracking-tight text-slate-700 appearance-none focus:bg-white focus:ring-2 focus:ring-red-600/10 focus:border-red-600/20 transition-all cursor-pointer shadow-sm"
-                                >
-                                  <option value="" className="text-slate-400">
-                                    — SELECCIONAR DEL CATÁLOGO ({categoriaActiva.toUpperCase()}) —
-                                  </option>
-
-                                  {/* Si esta fila ya tenía un insumo de OTRA categoría, lo mostramos primero para no perderlo */}
-                                  {insumoActualDeLaFila &&
-                                    insumoActualDeLaFila.categoria !== categoriaActiva && (
-                                      <option value={insumoActualDeLaFila.id}>
-                                        {insumoActualDeLaFila.clave} • {insumoActualDeLaFila.descripcion.toUpperCase()} ({insumoActualDeLaFila.unidad}) — {insumoActualDeLaFila.categoria.toUpperCase()}
-                                      </option>
-                                    )}
-
-                                  {insumos
-                                    .filter((ins) => ins.categoria === categoriaActiva)
-                                    .filter(
-                                      (ins) =>
-                                        !insumosSeleccionados.includes(ins.id) ||
-                                        ins.id === d.insumo_id
-                                    )
-                                    .filter(
-                                      (ins) =>
-                                        !search ||
-                                        ins.descripcion
-                                          .toLowerCase()
-                                          .includes(search.toLowerCase()) ||
-                                        ins.clave
-                                          ?.toLowerCase()
-                                          .includes(search.toLowerCase())
-                                    )
-                                    .map((ins) => (
-                                      <option
-                                        key={ins.id}
-                                        value={ins.id}
-                                        className="font-bold py-2"
-                                      >
-                                        {ins.clave} • {ins.descripcion.toUpperCase()} ({ins.unidad}) | DISP: {ins.disponible}
-                                      </option>
-                                    ))}
-                                </select>
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-red-600 transition-colors">
-                                  <Layers size={14} />
-                                </div>
-                              </div>
-                              {insumoActualDeLaFila && (
+                              <ItemSelector
+                                value={d.item_id}
+                                displayLabel={displayLabel}
+                                placeholder={`SELECCIONAR (${categoriaActiva.toUpperCase()})`}
+                                options={opciones}
+                                onSelect={(val) => {
+                                  const tipo: Tipo =
+                                    categoriaActiva === CATEGORIA_INDIRECTOS
+                                      ? "indirecto"
+                                      : "insumo";
+                                  seleccionarItem(i, val, tipo);
+                                }}
+                              />
+                              {(insumoDeLaFila || indirectoDeLaFila) && (
                                 <p className="text-[8px] font-black uppercase tracking-widest text-slate-300 mt-1 ml-1">
-                                  {insumoActualDeLaFila.categoria}
+                                  {insumoDeLaFila
+                                    ? insumoDeLaFila.categoria
+                                    : "Indirectos"}
                                 </p>
                               )}
                             </td>
@@ -584,12 +783,14 @@ export default function RequisicionesPage() {
                                   value={d.cantidad}
                                   onChange={(e) => {
                                     const cantidad = Number(e.target.value);
-                                    const insumo = insumos.find(
-                                      (ins) => ins.id === d.insumo_id
-                                    );
-                                    if (insumo && cantidad > insumo.disponible) {
-                                      alert(`Stock insuficiente. Disponible: ${insumo.disponible}`);
-                                      return;
+                                    if (d.tipo === "insumo") {
+                                      const insumo = insumos.find(
+                                        (ins) => ins.id === d.item_id
+                                      );
+                                      if (insumo && cantidad > insumo.disponible) {
+                                        alert(`Stock insuficiente. Disponible: ${insumo.disponible}`);
+                                        return;
+                                      }
                                     }
                                     updateRow(i, "cantidad", cantidad);
                                   }}
@@ -644,7 +845,7 @@ export default function RequisicionesPage() {
               >
                 {modoEditar
                   ? "Confirmar Cambios"
-                  : `Generar Requisición SIGO (${detalles.filter((d) => d.insumo_id).length})`}
+                  : `Generar Requisición SIGO (${detalles.filter((d) => d.item_id).length})`}
               </Button>
             </div>
           </div>

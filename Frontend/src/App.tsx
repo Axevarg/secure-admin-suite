@@ -37,6 +37,7 @@ import ColaboradorPerfil from "./pages/ColaboradorPerfil";
 import ColaboradorForm from "./pages/ColaboradorForm";
 import NominaLista from "./pages/Nominalista";
 import NominaDetalle from "./pages/Nominadetalle";
+import CumpleanosPage from "@/pages/CumpleanosPage";
 
 const queryClient = new QueryClient();
 
@@ -107,6 +108,8 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
+            <Route path="/cumpleanos" element={<CumpleanosPage />} />
             {/* Obras */}
             <Route
               path="/obras"
@@ -120,24 +123,70 @@ const App = () => (
             <Route
               path="/remesas"
               element={
-                <ProtectedRoute permission="compras:view">
+                <ProtectedRoute permission="remesas:view">
                   <RemesasPage />
                 </ProtectedRoute>
               }
             />
-            <Route path="/obras/:id/dashboard" element={<ObraDashboard />} />
-            <Route path="/obras/:id/personal" element={<ObraPersonalPage />} />
-            <Route path="/obras/:id/asistencia" element={<AsistenciaPage />} />
-            <Route path="/obras/:id/insumos" element={<InsumosPage />} />
-            <Route path="/obras/:id/evidencias" element={<EvidenciasPage />} />
+
+            {/* Obra (workspace) — mismos perms que obraNav en AppSidebar */}
+            <Route
+              path="/obras/:id/dashboard"
+              element={
+                <ProtectedRoute permission="obra_dashboard:view">
+                  <ObraDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/obras/:id/personal"
+              element={
+                <ProtectedRoute permission="trabajadores:view">
+                  <ObraPersonalPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/obras/:id/asistencia"
+              element={
+                <ProtectedRoute permission="asistencia:view">
+                  <AsistenciaPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/obras/:id/insumos"
+              element={
+                <ProtectedRoute permission="presupuesto:view">
+                  <InsumosPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/obras/:id/evidencias"
+              element={
+                <ProtectedRoute permission="evidencias:view">
+                  <EvidenciasPage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/obras/:id/requisiciones"
-              element={<RequisicionesPage />}
+              element={
+                <ProtectedRoute permission="requisiciones:view">
+                  <RequisicionesPage />
+                </ProtectedRoute>
+              }
             />
             <Route
               path="/requisiciones/:reqId"
-              element={<RequisicionDetallePage />}
+              element={
+                <ProtectedRoute permission="requisiciones:view">
+                  <RequisicionDetallePage />
+                </ProtectedRoute>
+              }
             />
+
             {/* Especialidades */}
             <Route
               path="/especialidades"
@@ -165,35 +214,89 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            {/* 🔐 Roles */}
+
+            {/* Bancos — módulo propio, separado de Remesas */}
             <Route
-              path="/roles"
+              path="/bancos"
               element={
-                <ProtectedRoute permission="roles:view">
-                  <RolesPermissions />
+                <ProtectedRoute permission="bancos:view">
+                  <BancosDashboard />
                 </ProtectedRoute>
               }
             />
-            <Route path="/bancos" element={<BancosDashboard />} />
-            <Route path="/bancos/cuentas" element={<BancosCuentas />} />
-            <Route path="/bancos/movimientos" element={<BancosMovimientos />} />
-            <Route path="/colaboradores/nuevo" element={<ColaboradorForm />} />
-            
-            <Route path="/colaboradores/:id" element={<ColaboradorPerfil />} />
-            <Route path="/colaboradores" element={<ColaboradoresLista />} />
+            <Route
+              path="/bancos/cuentas"
+              element={
+                <ProtectedRoute permission="bancos:view">
+                  <BancosCuentas />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bancos/movimientos"
+              element={
+                <ProtectedRoute permission="bancos:view">
+                  <BancosMovimientos />
+                </ProtectedRoute>
+              }
+            />
 
-            <Route path="/nomina"     element={<NominaLista />} />
-            <Route path="/nomina/:id" element={<NominaDetalle />} />
-
+            {/* Colaboradores / Nómina */}
+            <Route
+              path="/colaboradores/nuevo"
+              element={
+                <ProtectedRoute permission="rh:view">
+                  <ColaboradorForm />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/colaboradores/:id"
+              element={
+                <ProtectedRoute permission="rh:view">
+                  <ColaboradorPerfil />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/colaboradores"
+              element={
+                <ProtectedRoute permission="rh:view">
+                  <ColaboradoresLista />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/colaboradores/:id/editar"
-              element={<ColaboradorForm />}
+              element={
+                <ProtectedRoute permission="rh:view">
+                  <ColaboradorForm />
+                </ProtectedRoute>
+              }
             />
+
+            <Route
+              path="/nomina"
+              element={
+                <ProtectedRoute permission="rh:approve">
+                  <NominaLista />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/nomina/:id"
+              element={
+                <ProtectedRoute permission="rh:approve">
+                  <NominaDetalle />
+                </ProtectedRoute>
+              }
+            />
+
             {/* 🔐 Aprobaciones */}
             <Route
               path="/aprobaciones"
               element={
-                <ProtectedRoute permission="requisiciones:approve">
+                <ProtectedRoute permission="aprobaciones:view">
                   <AprobacionesPage />
                 </ProtectedRoute>
               }

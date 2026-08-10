@@ -7,7 +7,7 @@ import {
   getRemesa,
   autorizarRemesa,
   marcarPagada,
-  marcarRecibida, pagarRemesaConBanco
+  marcarRecibida, marcarPendientePago
 } from "../controllers/remesas.controller.js";
 
 const router = express.Router();
@@ -52,6 +52,6 @@ router.put("/pagada/:id", marcarPagada);
 // Marcar como recibida
 router.put("/recibida/:id", marcarRecibida);
 
-router.put("/:id/pagar-con-banco", pagarRemesaConBanco);
+router.put("/:id/marcar-pendiente-pago",marcarPendientePago);
 
 export default router;

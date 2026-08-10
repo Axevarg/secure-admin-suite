@@ -215,6 +215,21 @@ ORDER BY i.categoria_id, i.descripcion
       [obraId],
     );
 
+    const totalesExtraResult = await pool.query(
+  `
+  SELECT 
+    c.id AS categoria_id,
+    c.nombre AS categoria,
+    ROUND(SUM(i.importe)::numeric, 2) AS total
+  FROM insumos i
+  JOIN insumo_categorias c ON c.id = i.categoria_id
+  WHERE i.obra_id = $1 AND i.es_extraordinario = true
+  GROUP BY c.id, c.nombre
+  ORDER BY c.id
+  `,
+  [obraId],
+);
+
     const totalGeneral = totalesResult.rows.reduce(
       (sum, r) => sum + Number(r.total),
       0,
@@ -222,8 +237,12 @@ ORDER BY i.categoria_id, i.descripcion
 
     res.json({
       insumos: result.rows,
-      totales: totalesResult.rows,
-      total_general: Number(totalGeneral.toFixed(2)),
+  totales: totalesResult.rows,
+  totales_extraordinarios: totalesExtraResult.rows,
+  total_extraordinario_general: Number(
+    totalesExtraResult.rows.reduce((s, r) => s + Number(r.total), 0).toFixed(2),
+  ),
+  total_general: Number(totalGeneral.toFixed(2)),
     });
   } catch (err) {
     console.error(err);
@@ -254,5 +273,73 @@ export const agregarInventario = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: "Error al agregar inventario" });
+  }
+};
+
+export const agregarInsumoManual = async (req, res) => {
+  try {
+    const {
+      obra_id,
+      categoria_id,
+      clave,
+      descripcion,
+      unidad,
+      cantidad,
+      costo_unitario,
+      motivo,
+    } = req.body;
+
+    if (!obra_id || !categoria_id) {
+      return res.status(400).json({ message: "Obra y categoría son obligatorias" });
+    }
+    if (!descripcion || !descripcion.trim()) {
+      return res.status(400).json({ message: "La descripción es obligatoria" });
+    }
+    if (!cantidad || Number(cantidad) <= 0) {
+      return res.status(400).json({ message: "La cantidad debe ser mayor a 0" });
+    }
+    if (costo_unitario === undefined || Number(costo_unitario) < 0) {
+      return res.status(400).json({ message: "El costo unitario es inválido" });
+    }
+    if (!motivo || motivo.trim().length < 10) {
+      return res.status(400).json({
+        message: "Debes escribir una justificación (mínimo 10 caracteres)",
+      });
+    }
+
+    const cantidadNum = Number(cantidad);
+    const costoNum = Number(costo_unitario);
+    const importe = Number((cantidadNum * costoNum).toFixed(2));
+    const claveFinal = clave && clave.trim() ? clave.trim() : `EXTRA-${Date.now()}`;
+
+    const result = await pool.query(
+      `
+      INSERT INTO insumos(
+        obra_id, categoria_id, clave, descripcion, unidad,
+        cantidad, costo_unitario, importe, es_extraordinario, motivo
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8, true, $9)
+      RETURNING *
+      `,
+      [
+        obra_id,
+        categoria_id,
+        claveFinal,
+        descripcion.trim(),
+        unidad,
+        cantidadNum,
+        costoNum,
+        importe,
+        motivo.trim(),
+      ],
+    );
+
+    res.json({
+      message: "Material extraordinario agregado correctamente",
+      insumo: result.rows[0],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
   }
 };

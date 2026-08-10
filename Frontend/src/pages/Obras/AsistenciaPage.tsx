@@ -25,6 +25,8 @@ import {
   CalendarRange,
   Activity,
   ChevronRight,
+  Clock3,
+  Users,
 } from "lucide-react";
 
 interface TrabajadorRow {
@@ -187,9 +189,9 @@ export default function AsistenciaPage() {
     );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-24 p-4 md:p-8 space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       {/* HEADER SIGO */}
-      <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden max-w-7xl mx-auto">
+      <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
         <div className="absolute right-0 top-0 w-32 h-32 bg-red-600/10 rounded-full -mr-16 -mt-16 blur-3xl" />
 
         <div className="relative z-10">
@@ -353,8 +355,111 @@ export default function AsistenciaPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ===================== DASHBOARD DEL DÍA ===================== */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        {/* Total */}
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6 hover:shadow-md transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-5">
+            <Users className="text-slate-700" size={24} />
+          </div>
+
+          <p className="text-3xl font-black text-slate-900">{rows.length}</p>
+
+          <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-slate-500">
+            Trabajadores
+          </p>
+
+          <span className="text-[11px] text-slate-400 font-bold">
+            Registrados
+          </span>
+        </div>
+
+        {/* Asistieron */}
+        <div className="bg-white rounded-[2rem] border border-green-100 shadow-sm p-6 hover:shadow-md transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-green-100 flex items-center justify-center mb-5">
+            <CheckCircle2 className="text-green-600" size={24} />
+          </div>
+
+          <p className="text-3xl font-black text-green-600">
+            {rows.filter((r) => r.estado === "asistio").length}
+          </p>
+
+          <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-green-700">
+            Asistieron
+          </p>
+
+          <span className="text-[11px] text-slate-400 font-bold">
+            {rows.length
+              ? Math.round(
+                  (rows.filter((r) => r.estado === "asistio").length /
+                    rows.length) *
+                    100,
+                )
+              : 0}
+            % del personal
+          </span>
+        </div>
+
+        {/* Tarde */}
+        <div className="bg-white rounded-[2rem] border border-amber-100 shadow-sm p-6 hover:shadow-md transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center mb-5">
+            <Timer className="text-amber-500" size={24} />
+          </div>
+
+          <p className="text-3xl font-black text-amber-500">
+            {rows.filter((r) => r.estado === "tarde").length}
+          </p>
+
+          <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-amber-600">
+            Tardanzas
+          </p>
+
+          <span className="text-[11px] text-slate-400 font-bold">
+            Llegadas tarde
+          </span>
+        </div>
+
+        {/* Faltas */}
+        <div className="bg-white rounded-[2rem] border border-red-100 shadow-sm p-6 hover:shadow-md transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mb-5">
+            <XCircle className="text-red-600" size={24} />
+          </div>
+
+          <p className="text-3xl font-black text-red-600">
+            {rows.filter((r) => r.estado === "falta").length}
+          </p>
+
+          <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-red-600">
+            Faltas
+          </p>
+
+          <span className="text-[11px] text-slate-400 font-bold">
+            Ausencias del día
+          </span>
+        </div>
+
+        {/* Horas Extra */}
+        <div className="bg-white rounded-[2rem] border border-blue-100 shadow-sm p-6 hover:shadow-md transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center mb-5">
+            <Clock3 className="text-blue-600" size={24} />
+          </div>
+
+          <p className="text-3xl font-black text-blue-600">
+            {rows.reduce((t, r) => t + (r.horas_extra || 0), 0)}
+          </p>
+
+          <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-blue-700">
+            Horas Extra
+          </p>
+
+          <span className="text-[11px] text-slate-400 font-bold">
+            Acumuladas
+          </span>
+        </div>
+      </div>
+
       {/* BARRA DE BÚSQUEDA Y ACCIONES */}
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-stretch">
+      <div className="max-w-8xl mx-auto flex flex-col md:flex-row gap-4 items-stretch">
         {/* BUSCADOR (CRECE PARA OCUPAR EL ESPACIO) */}
         <div className="relative group flex-1">
           <Search
@@ -380,7 +485,7 @@ export default function AsistenciaPage() {
         </Button>
       </div>
 
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-8xl mx-auto">
         {/* VISTA ESCRITORIO */}
         <div className="hidden lg:block bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
           <table className="w-full text-left border-collapse">
@@ -547,25 +652,6 @@ export default function AsistenciaPage() {
             </p>
           </div>
         )}
-      </div>
-
-      {/* RESUMEN FLOTANTE */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-lg bg-slate-900/95 backdrop-blur-md rounded-full py-4 px-10 shadow-2xl z-40 flex justify-between items-center border border-white/10">
-        <div className="flex gap-8">
-          <ResumenItem
-            label="Asistieron"
-            count={rows.filter((r) => r.estado === "asistio").length}
-            color="text-green-500"
-          />
-          <ResumenItem
-            label="Faltas"
-            count={rows.filter((r) => r.estado === "falta").length}
-            color="text-red-500"
-          />
-        </div>
-        <p className="hidden sm:block text-[9px] font-black text-slate-500 uppercase tracking-widest italic">
-          SIGO v2.0
-        </p>
       </div>
     </div>
   );

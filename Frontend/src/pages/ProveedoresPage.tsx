@@ -22,7 +22,7 @@ import {
   Building,
   CreditCard,
   UserCheck,
-  X, RefreshCcw
+  X, RefreshCcw, Wallet, Clock, CheckCircle2, TrendingUp
 } from "lucide-react";
 
 interface Proveedor {
@@ -78,6 +78,33 @@ export default function ProveedoresPage() {
     }
     setOpenModal(true);
   };
+
+
+  const [cuentaModal, setCuentaModal] = useState<{
+  proveedor: Proveedor;
+  resumen: any;
+  historial_pagos: any[];
+  historial_remesas: any[];
+} | null>(null);
+const [loadingCuenta, setLoadingCuenta] = useState(false);
+
+const verCuenta = async (p: Proveedor) => {
+  setLoadingCuenta(true);
+  try {
+    const res = await api.get(`/proveedores/${p.id}/resumen`);
+    setCuentaModal({
+      proveedor: p,
+      resumen: res.data.resumen,
+      historial_pagos: res.data.historial_pagos,
+      historial_remesas: res.data.historial_remesas,
+    });
+  } finally {
+    setLoadingCuenta(false);
+  }
+};
+
+const fmt = (n: number) =>
+  (n ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 });
 
   const guardarProveedor = async () => {
     if (!formProveedor.nombre) return alert("Nombre requerido");
@@ -185,23 +212,33 @@ export default function ProveedoresPage() {
                   </div>
                 </td>
                 <td className="px-10 py-5 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleOpenModal(p)}
-                      className="h-10 rounded-xl border-slate-200 font-black text-[9px] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all"
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => eliminar(p.id!)}
-                      className="h-10 w-10 p-0 rounded-xl border-slate-100 text-slate-300 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-                </td>
+  <div className="flex justify-end gap-2">
+    <Button
+      variant="outline"
+      onClick={() => verCuenta(p)}
+      disabled={loadingCuenta}
+      className="h-10 rounded-xl border-slate-200 font-black text-[9px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
+    >
+      <Wallet size={14} className="mr-1.5" />
+      Ver Cuenta
+    </Button>
+    <Button
+      variant="outline"
+      onClick={() => handleOpenModal(p)}
+      className="h-10 rounded-xl border-slate-200 font-black text-[9px] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all"
+    >
+      Editar
+    </Button>
+    <Button
+      variant="outline"
+      onClick={() => eliminar(p.id!)}
+      className="h-10 w-10 p-0 rounded-xl border-slate-100 text-slate-300 hover:text-red-600 hover:bg-red-50"
+    >
+      <Trash2 size={16} />
+    </Button>
+  </div>
+</td>
+
               </tr>
             ))}
           </tbody>
@@ -318,9 +355,9 @@ export default function ProveedoresPage() {
 
           <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-4">
             <Button 
-              variant="outline" 
+              variant="ghost" 
               onClick={() => setOpenModal(false)}
-              className="flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-[10px] border-slate-200 text-slate-400"
+              className=" font-black text-[10px] focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 h-14 rounded-2xl font-black uppercase transition-all tracking-widest text-[10px] text-slate-400 hover:bg-slate-100 hover:text-slate-600 outline-none"
             >
               Cancelar
             </Button>
@@ -334,6 +371,264 @@ export default function ProveedoresPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+
+      <Dialog open={!!cuentaModal} onOpenChange={(open) => !open && setCuentaModal(null)}>
+  <DialogContent className="max-w-4xl rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
+    {cuentaModal && (
+      <>
+        {/* HEADER */}
+        <div className="bg-slate-900 p-8 text-white relative">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-500" />
+          <DialogTitle className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3">
+            <Wallet size={24} className="text-emerald-500" />
+            {cuentaModal.proveedor.nombre}
+          </DialogTitle>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mt-1">
+            Estado de cuenta y trazabilidad de pagos
+          </p>
+        </div>
+
+        <div className="max-h-[75vh] overflow-y-auto bg-slate-50/30 p-8 space-y-8">
+          {/* TARJETAS RESUMEN */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">
+                Total Comprado
+              </p>
+              <p className="text-xl font-black text-slate-900">
+                ${fmt(cuentaModal.resumen.total_comprado)}
+              </p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
+                {cuentaModal.resumen.num_remesas} orden(es)
+              </p>
+            </div>
+
+            <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1 flex items-center gap-1">
+                <CheckCircle2 size={11} className="text-emerald-600" /> Total Pagado
+              </p>
+              <p className="text-xl font-black text-emerald-600">
+                ${fmt(cuentaModal.resumen.total_pagado)}
+              </p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
+                {cuentaModal.resumen.num_pagos} pago(s) confirmado(s)
+              </p>
+            </div>
+
+            {/* ← Deuda Pendiente: ahora es la suma de órdenes sin procesar + créditos con saldo por abonar */}
+            <div
+              className={`rounded-2xl p-5 shadow-sm border ${
+                cuentaModal.resumen.deuda_pendiente > 0
+                  ? "bg-amber-50 border-amber-200"
+                  : "bg-white border-slate-100"
+              }`}
+            >
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1 flex items-center gap-1">
+                <Clock size={11} className="text-amber-600" /> Deuda Pendiente
+              </p>
+              <p
+                className={`text-xl font-black ${
+                  cuentaModal.resumen.deuda_pendiente > 0 ? "text-amber-600" : "text-slate-400"
+                }`}
+              >
+                ${fmt(cuentaModal.resumen.deuda_pendiente)}
+              </p>
+              <div className="text-[9px] font-bold text-slate-400 uppercase mt-1 space-y-0.5">
+                {cuentaModal.resumen.num_remesas_pendientes > 0 && (
+                  <p>{cuentaModal.resumen.num_remesas_pendientes} orden(es) sin pagar</p>
+                )}
+                {cuentaModal.resumen.num_creditos_pendientes > 0 && (
+                  <p className="flex items-center gap-1 text-amber-600">
+                    <CreditCard size={9} /> {cuentaModal.resumen.num_creditos_pendientes} crédito(s) con saldo
+                  </p>
+                )}
+                {cuentaModal.resumen.num_remesas_pendientes === 0 &&
+                  cuentaModal.resumen.num_creditos_pendientes === 0 && <p>Sin pendientes</p>}
+              </div>
+            </div>
+
+            <div
+              className={`rounded-2xl p-5 shadow-sm border ${
+                cuentaModal.resumen.saldo_a_favor > 0
+                  ? "bg-blue-50 border-blue-200"
+                  : "bg-white border-slate-100"
+              }`}
+            >
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1 flex items-center gap-1">
+                <TrendingUp size={11} className="text-blue-600" /> Saldo a Favor
+              </p>
+              <p
+                className={`text-xl font-black ${
+                  cuentaModal.resumen.saldo_a_favor > 0 ? "text-blue-600" : "text-slate-400"
+                }`}
+              >
+                ${fmt(cuentaModal.resumen.saldo_a_favor)}
+              </p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
+                {cuentaModal.resumen.saldo_a_favor > 0 ? "Revisar pagos duplicados" : "Sin excedentes"}
+              </p>
+            </div>
+          </div>
+
+          {cuentaModal.resumen.total_en_proceso > 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex items-center justify-between">
+              <p className="text-[10px] font-black uppercase text-orange-700">
+                Hay ${fmt(cuentaModal.resumen.total_en_proceso)} en {cuentaModal.resumen.num_en_proceso} pago(s) aún sin confirmar
+              </p>
+            </div>
+          )}
+
+          {/* ← NUEVO: aviso específico de créditos con saldo pendiente */}
+          {cuentaModal.resumen.deuda_creditos_parciales > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
+              <p className="text-[10px] font-black uppercase text-amber-700 flex items-center gap-2">
+                <CreditCard size={13} />
+                Debes ${fmt(cuentaModal.resumen.deuda_creditos_parciales)} en {cuentaModal.resumen.num_creditos_pendientes} pago(s) a crédito sin liquidar
+              </p>
+            </div>
+          )}
+
+          {/* HISTORIAL DE PAGOS */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 px-1">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">
+                Historial de Pagos
+              </h3>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            {cuentaModal.historial_pagos.length === 0 ? (
+              <p className="text-center py-8 text-slate-300 font-black text-[10px] uppercase">
+                Sin pagos registrados
+              </p>
+            ) : (
+              <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-left">
+                      <th className="p-3 font-black text-[9px] uppercase text-slate-400">Fecha</th>
+                      <th className="p-3 font-black text-[9px] uppercase text-slate-400">Concepto</th>
+                      <th className="p-3 font-black text-[9px] uppercase text-slate-400">Cuenta</th>
+                      <th className="p-3 font-black text-[9px] uppercase text-slate-400">Estado</th>
+                      <th className="p-3 font-black text-[9px] uppercase text-slate-400 text-right">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {cuentaModal.historial_pagos.map((pago: any) => {
+                      const esCreditoConfirmado =
+                        pago.forma_pago === "credito" && pago.estado === "confirmado";
+                      const pendiente = Number(pago.saldo_pendiente ?? 0);
+                      const liquidado = pendiente <= 0.01;
+                      return (
+                        <tr key={pago.id} className="hover:bg-slate-50/50">
+                          <td className="p-3 font-bold text-slate-600 align-top">
+                            {new Date(pago.fecha_movimiento).toLocaleDateString("es-MX")}
+                          </td>
+                          <td className="p-3 align-top">
+                            <p className="font-bold text-slate-800 uppercase">{pago.concepto ?? "—"}</p>
+                            {pago.remesa_folio && (
+                              <p className="text-[9px] text-slate-400 font-bold">HGZ.{pago.remesa_folio}</p>
+                            )}
+                            {pago.forma_pago && (
+                              <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                                {pago.forma_pago === "credito"
+                                  ? `Crédito ${pago.num_cuotas ? `(${pago.num_cuotas} cuotas)` : "(indefinido)"}`
+                                  : "Contado"}
+                              </p>
+                            )}
+                            {esCreditoConfirmado && (
+                              <p
+                                className={`text-[9px] font-black uppercase mt-0.5 flex items-center gap-1 ${
+                                  liquidado ? "text-emerald-600" : "text-amber-600"
+                                }`}
+                              >
+                                <CreditCard size={9} />
+                                {liquidado
+                                  ? "Liquidado"
+                                  : `Abonado $${fmt(Number(pago.monto_abonado))} · Pendiente $${fmt(pendiente)}`}
+                              </p>
+                            )}
+                          </td>
+                          <td className="p-3 font-bold text-slate-500 uppercase align-top">
+                            {pago.cuenta_nombre ?? "—"}
+                          </td>
+                          <td className="p-3 align-top">
+                            <span
+                              className={`text-[9px] font-black uppercase ${
+                                pago.estado === "confirmado" ? "text-emerald-600" : "text-amber-600"
+                              }`}
+                            >
+                              {pago.estado}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right font-black text-slate-900 align-top">
+                            ${fmt(pago.monto)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* HISTORIAL DE ÓRDENES (REMESAS) */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 px-1">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">
+                Órdenes de Compra (Remesas)
+              </h3>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            {cuentaModal.historial_remesas.length === 0 ? (
+              <p className="text-center py-8 text-slate-300 font-black text-[10px] uppercase">
+                Sin órdenes registradas
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {cuentaModal.historial_remesas.map((r: any) => (
+                  <div
+                    key={r.id}
+                    className="bg-white border border-slate-100 rounded-xl p-4 flex items-center justify-between shadow-sm"
+                  >
+                    <div>
+                      <p className="font-black text-xs text-slate-900">HGZ.{r.folio}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">{r.obra ?? "—"}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span
+                        className={`text-[9px] font-black uppercase px-2 py-1 rounded-full ${
+                          r.estado === "pagada" || r.estado === "recibida"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {r.estado}
+                      </span>
+                      <span className="font-black text-sm text-slate-900">${fmt(r.monto_total)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 bg-white border-t border-slate-100 flex justify-end">
+          <Button
+            onClick={() => setCuentaModal(null)}
+            className="h-12 px-10 rounded-2xl bg-slate-900 hover:bg-red-600 text-white font-black uppercase tracking-widest text-[10px]"
+          >
+            Cerrar
+          </Button>
+        </div>
+      </>
+    )}
+  </DialogContent>
+</Dialog>
     </div>
   );
 }

@@ -24,7 +24,7 @@ import {
   ArrowLeft,
   Landmark,
   ChevronDown, ClipboardCheck, Banknote, ShieldCheck, Wallet, ArrowRightLeft,
-  Coins
+  Coins, Cake
 } from "lucide-react";
 
 import { NavLink } from "@/components/NavLink";
@@ -105,50 +105,47 @@ const systemNav = [
   {
     title: "Bancos",
     icon: Landmark,
-    perm: "remesas:view",
+    perm: "bancos:view",
     children: [
       {
         title: "Dashboard",
         url: "/bancos",
         icon: LayoutDashboard,
-        perm: "remesas:view",
+        perm: "bancos:view",
       },
       {
         title: "Cuentas",
         url: "/bancos/cuentas",
         icon: CreditCard,
-        perm: "remesas:view",
+        perm: "bancos:view",
       },
       {
         title: "Movimientos",
         url: "/bancos/movimientos",
         icon: ArrowRightLeft,
-        perm: "remesas:view",
+        perm: "bancos:view",
       },
     ],
   },
 
   /* ── NÓMINAS / RH ─────────────── */
-  {
-    title: "Nóminas",
-    icon: Wallet,
+{
+    title: "Colaboradores",
+    url: "/colaboradores",
+    icon: Users,
     perm: "rh:view",
-    children: [
-      {
-        title: "Colaboradores",
-        url: "/colaboradores",
-        icon: Users,
-        perm: "rh:view",
-      },
-      {
-        title: "Nomina",
-        url: "/nomina",
-        icon: Coins,
-        perm: "rh:approve",
-      },
-    ],
   },
-
+  {
+    title: "Cumpleaños",
+    url: "/cumpleanos",
+    icon: Cake
+  },
+  {
+    title: "Nomina",
+    url: "/nomina",
+    icon: Coins,
+    perm: "rh:approve",
+  },
   {
     title: "Usuarios",
     url: "/usuarios",

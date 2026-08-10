@@ -125,8 +125,8 @@ export default function Clientes() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
-              <Briefcase className="text-red-600" size={22} />
+           <div className="bg-red-600 p-2 rounded-xl shadow-lg shadow-red-900/40">
+              <Briefcase size={24} className="text-white" strokeWidth={2.5}  />
             </div>
             <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 leading-none">
               Clientes

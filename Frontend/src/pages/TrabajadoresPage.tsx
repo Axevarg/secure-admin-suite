@@ -405,7 +405,7 @@ export default function TrabajadoresPage() {
             <Button
               variant="ghost"
               onClick={() => setShowModal(false)}
-              className="font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all"
+              className="font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-100 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all outline-none"
             >
               Cancelar
             </Button>

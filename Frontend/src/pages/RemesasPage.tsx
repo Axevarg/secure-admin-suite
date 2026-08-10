@@ -35,6 +35,10 @@ interface Requisicion {
   id: number;
   folio: number;
   obra: string;
+  cotizacion_url: string | null;
+  requiere_factura: boolean | null;
+  forma_pago: "contado" | "credito" | null;
+  condiciones_pago: string | null;
 }
 
 interface DetalleReq {
@@ -55,11 +59,35 @@ interface AsignacionDetalle {
   precio: number | null;
 }
 
+// Lee el usuario de sessionStorage o, si no está ahí, de localStorage.
+// Cubre el caso de que el login lo haya guardado en cualquiera de los dos.
+const getStoredUser = (): any => {
+  const raw =
+    sessionStorage.getItem("user") ?? localStorage.getItem("user");
+
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+};
+
+// Cambia esto si tu axios ya trae baseURL absoluto (en ese caso deja "")
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "";
+
 export default function RemesasPage() {
   const [remesas, setRemesas] = useState<Remesa[]>([]);
   const [requisiciones, setRequisiciones] = useState<Requisicion[]>([]);
   const [detalles, setDetalles] = useState<DetalleReq[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [infoCotizacion, setInfoCotizacion] = useState<{
+    cotizacion_url: string | null;
+    requiere_factura: boolean | null;
+    forma_pago: "contado" | "credito" | null;
+    condiciones_pago: string | null;
+  } | null>(null);
 
   const [selected, setSelected] = useState<any>(null);
   const [openDetalle, setOpenDetalle] = useState(false);
@@ -79,6 +107,23 @@ export default function RemesasPage() {
     (c) => c.id === Number(pagoForm.cuenta_id),
   );
 
+  // Reemplaza confirmarPago por esto:
+const confirmarPendientePago = async () => {
+  if (!remesaPago) return;
+
+  const user = getStoredUser();
+
+  await api.put(`/remesas/${remesaPago.id}/marcar-pendiente-pago`, {
+    usuario_id: user.id,
+    concepto: pagoForm.concepto,
+  });
+
+  setOpenPagar(false);
+  setRemesaPago(null);
+
+  loadRemesas();
+};
+
   const [reqId, setReqId] = useState<number | null>(null); // ✅ Ahora guarda { proveedor_id, precio } por detalle_id
   const [asignaciones, setAsignaciones] = useState<
     Record<number, AsignacionDetalle>
@@ -87,8 +132,8 @@ export default function RemesasPage() {
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("todas");
 
-  const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
-  const isAdmin = currentUser.role_name === "admin";
+const currentUser = getStoredUser();
+const isAdmin = currentUser.role_name === "admin";
 
   const loadRemesas = async () => {
     const res = await api.get("/remesas");
@@ -117,9 +162,22 @@ export default function RemesasPage() {
   const seleccionarRequisicion = async (id: number) => {
     setReqId(id);
     setAsignaciones({});
+
+    const reqSeleccionada = requisiciones.find((r) => r.id === id);
+    setInfoCotizacion(
+      reqSeleccionada
+        ? {
+            cotizacion_url: reqSeleccionada.cotizacion_url,
+            requiere_factura: reqSeleccionada.requiere_factura,
+            forma_pago: reqSeleccionada.forma_pago,
+            condiciones_pago: reqSeleccionada.condiciones_pago,
+          }
+        : null,
+    );
+
     const res = await api.get(`/remesas/requisiciones/${id}/detalles`);
     setDetalles(res.data);
-  }; // Actualizar proveedor o precio de un insumo
+  };
 
   const setAsignacion = (
     detalleId: number,
@@ -135,45 +193,49 @@ export default function RemesasPage() {
     }));
   };
 
-  const generarRemesas = async () => {
-    if (!reqId) return alert("Selecciona una requisición");
-
-    // ✅ Leer desde sessionStorage
-    const user = JSON.parse(sessionStorage.getItem("user") || "{}");
-    const uid = user.id;
-    if (!uid) return alert("No se encontró el usuario en sesión");
-
-    const incompletos = detalles.filter(
-      (d) => !asignaciones[d.id]?.proveedor_id || !asignaciones[d.id]?.precio,
-    );
-    if (incompletos.length > 0)
-      return alert(
-        `Faltan proveedor o precio en: ${incompletos.map((d) => d.insumo).join(", ")}`,
-      );
-
-    const detallesPayload = detalles.map((d) => ({
-      detalle_id: d.id,
-      proveedor_id: asignaciones[d.id].proveedor_id,
-      precio: asignaciones[d.id].precio,
-    }));
-
-    await api.post(`/remesas/generar/${reqId}`, {
-      usuario_id: uid, // ✅ UUID correcto desde sessionStorage
-      detalles: detallesPayload,
-    });
-
+  const cerrarModalCrear = () => {
     setOpenCrear(false);
     setDetalles([]);
     setAsignaciones({});
     setReqId(null);
-    loadRemesas();
+    setInfoCotizacion(null);
   };
 
+const generarRemesas = async () => {
+  if (!reqId) return alert("Selecciona una requisición");
+
+  const user = getStoredUser();
+  const uid = user.id;
+  if (!uid) return alert("No se encontró el usuario en sesión");
+
+  const incompletos = detalles.filter(
+    (d) => !asignaciones[d.id]?.proveedor_id || !asignaciones[d.id]?.precio,
+  );
+  if (incompletos.length > 0)
+    return alert(
+      `Faltan proveedor o precio en: ${incompletos.map((d) => d.insumo).join(", ")}`,
+    );
+
+  const detallesPayload = detalles.map((d) => ({
+    detalle_id: d.id,
+    proveedor_id: asignaciones[d.id].proveedor_id,
+    precio: asignaciones[d.id].precio,
+  }));
+
+  await api.post(`/remesas/generar/${reqId}`, {
+    usuario_id: uid,
+    detalles: detallesPayload,
+  });
+
+  cerrarModalCrear();
+  loadRemesas();
+};
+
 const autorizar = async (id: number) => {
-  const user = JSON.parse(sessionStorage.getItem("user") || "{}");
+  const user = getStoredUser();
 
   await api.put(`/remesas/autorizar/${id}`, {
-    usuario_id: user.id, // UUID
+    usuario_id: user.id,
   });
 
   loadRemesas();
@@ -187,7 +249,7 @@ const autorizar = async (id: number) => {
 const confirmarPago = async () => {
   if (!remesaPago) return;
 
-  const user = JSON.parse(sessionStorage.getItem("user") || "{}");
+  const user = getStoredUser();
 
   if (!pagoForm.cuenta_id) {
     return alert("Selecciona una cuenta bancaria");
@@ -204,7 +266,7 @@ const confirmarPago = async () => {
     cuenta_id: pagoForm.cuenta_id,
     concepto: pagoForm.concepto,
     fecha_movimiento: new Date(),
-    usuario_id: user.id, // UUID
+    usuario_id: user.id,
   });
 
   setOpenPagar(false);
@@ -239,38 +301,33 @@ const confirmarPago = async () => {
         r.obra?.toLowerCase().includes(search.toLowerCase()),
     )
     .sort((a, b) => {
-      const orden: Record<string, number> = {
-        pendiente: 0,
-        autorizada: 1,
-        pagada: 2,
-        recibida: 3,
-      };
+const orden: Record<string, number> = {
+  pendiente: 0,
+  autorizada: 1,
+  pendiente_pago: 2,
+  pagada: 3,
+  recibida: 4,
+};
       return (orden[a.estado] ?? 99) - (orden[b.estado] ?? 99);
     });
 
-  const estadoBadge: Record<string, { bg: string; text: string; dot: string }> =
-    {
-      pendiente: {
-        bg: "bg-amber-50",
-        text: "text-amber-700",
-        dot: "bg-amber-500",
-      },
-      autorizada: {
-        bg: "bg-blue-50",
-        text: "text-blue-700",
-        dot: "bg-blue-500",
-      },
-      pagada: {
-        bg: "bg-emerald-50",
-        text: "text-emerald-700",
-        dot: "bg-emerald-500",
-      },
-      recibida: {
-        bg: "bg-slate-100",
-        text: "text-slate-700",
-        dot: "bg-slate-400",
-      },
-    };
+const estadoBadge: Record<string, { bg: string; text: string; dot: string }> = {
+  pendiente: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
+  autorizada: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
+  pendiente_pago: { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-500" },
+  pagada: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  recibida: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400" },
+};
+
+  // URL absoluta para mostrar/abrir la cotización (la BD guarda ruta relativa tipo /uploads/...)
+  const cotizacionFullUrl = infoCotizacion?.cotizacion_url
+    ? infoCotizacion.cotizacion_url.startsWith("http")
+      ? infoCotizacion.cotizacion_url
+      : `${API_BASE_URL}${infoCotizacion.cotizacion_url}`
+    : null;
+  const cotizacionEsPdf = cotizacionFullUrl
+    ? cotizacionFullUrl.toLowerCase().endsWith(".pdf")
+    : false;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -323,6 +380,7 @@ const confirmarPago = async () => {
           <option value="todas">Todos los estados</option>
           <option value="pendiente">🟠 Pendientes</option>
           <option value="autorizada">🔵 Autorizadas</option>
+          <option value="pendiente_pago">🟠 Pendientes de Pago</option>
           <option value="pagada">🟢 Pagadas</option>
           <option value="recibida">⚪ Recibidas</option>
         </select>
@@ -420,11 +478,11 @@ const confirmarPago = async () => {
                         onClick={() => {
                           setRemesaPago(r);
                           setOpenPagar(true);
-                          loadCuentas();
+                          
 
                           setPagoForm({
                             cuenta_id: "",
-                            concepto: `Pago remesa HGZ.${r.folio}`,
+                            concepto: `Pago remesa ${r.folio}`,
                           });
                         }}
                       >
@@ -450,22 +508,25 @@ const confirmarPago = async () => {
 
       {/* ===== MODAL CREAR REMESAS REDISEÑADO ===== */}
       {openCrear && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[1rem] w-full max-w-4xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-white/20">
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-300"
+          style={{ marginTop: 0 }}
+        >
+          <div className="bg-white rounded-[1rem] w-full max-w-4xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col border border-white/20 transition-all">
             <div className="bg-slate-900 p-10 text-white relative shrink-0">
               <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600" />
               <div className="flex justify-between items-start">
                 <div>
                   <h2 className="font-black text-2xl uppercase tracking-tighter flex items-center gap-3">
                     <TrendingUp size={24} className="text-red-600" />
-                    Consolidación de Remesas
+                    Remesas
                   </h2>
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2 ml-1">
                     Transformación de Requisición a Órdenes de Compra
                   </p>
                 </div>
                 <button
-                  onClick={() => setOpenCrear(false)}
+                  onClick={cerrarModalCrear}
                   className="bg-white/10 hover:bg-red-600 p-3 rounded-2xl transition-colors"
                 >
                   <X size={20} />
@@ -473,135 +534,221 @@ const confirmarPago = async () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-10 space-y-8 bg-slate-50/30">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-2">
-                  <Layers size={12} /> Seleccionar Requisición Autorizada
-                </label>
-                <select
-                  className="w-full h-14 rounded-2xl border-slate-100 bg-white font-black text-xs uppercase focus:ring-red-600/10 shadow-sm px-6"
-                  onChange={(e) =>
-                    seleccionarRequisicion(Number(e.target.value))
-                  }
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    Seleccione un folio de requisición...
-                  </option>
-                  {requisiciones.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      FOLIO {r.folio} — PROYECTO: {r.obra}
+            {/* CUERPO SCROLLEABLE */}
+            <div className="flex-1 overflow-y-auto p-10 bg-slate-50/30">
+              <div className="space-y-8">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-2">
+                    <Layers size={12} /> Seleccionar Requisición Autorizada
+                  </label>
+                  <select
+                    className="w-full h-14 rounded-2xl border-slate-100 bg-white font-black text-xs uppercase focus:ring-red-600/10 shadow-sm px-6"
+                    onChange={(e) =>
+                      seleccionarRequisicion(Number(e.target.value))
+                    }
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      Seleccione un folio de requisición...
                     </option>
-                  ))}
-                </select>
-              </div>
+                    {requisiciones.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        FOLIO {r.folio} — PROYECTO: {r.obra}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              {detalles.length > 0 && (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between px-2">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">
-                      Asignación de Costos por Insumo
-                    </h3>
-                    <div className="h-px flex-1 bg-slate-200 mx-4" />
-                  </div>
+                {/* BOTÓN COMPACTO DE COTIZACIÓN */}
+                {infoCotizacion?.cotizacion_url && (
+                  <div className="flex items-center justify-between bg-white border border-slate-100 rounded-2xl px-6 py-4 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                        <FileText size={16} className="text-red-600" />
+                      </div>
 
-                  <div className="grid gap-4">
-                    {detalles.map((d) => (
-                      <div
-                        key={d.id}
-                        className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group"
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-900">
+                          Cotización adjunta
+                        </p>
+
+                        <span className="text-[9px] uppercase text-slate-400 block">
+                          {cotizacionEsPdf ? "Documento PDF" : "Imagen"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.open(cotizacionFullUrl ?? "", "_blank")
+                        }
+                        className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase transition"
                       >
-                        <div className="flex flex-col md:flex-row gap-6 items-center">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-black text-red-600 uppercase mb-1">
-                              Insumo Requerido
-                            </p>
-                            <p className="font-black text-slate-800 uppercase text-sm truncate">
-                              {d.insumo}
-                            </p>
-                            <span className="inline-block mt-2 px-3 py-1 bg-slate-100 rounded-lg text-[9px] font-black text-slate-500 uppercase">
-                              CANTIDAD: {d.cantidad}
-                            </span>
-                          </div>
+                        Ver cotización
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                          <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                            <div className="w-full md:w-64">
-                              <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block ml-2">
-                                Proveedor
-                              </label>
-                              <select
-                                className="w-full h-12 border-slate-100 bg-slate-50 rounded-xl px-4 text-xs font-bold uppercase"
-                                onChange={(e) =>
-                                  setAsignacion(
-                                    d.id,
-                                    "proveedor_id",
-                                    Number(e.target.value),
-                                  )
-                                }
-                              >
-                                <option value="">Seleccionar...</option>
-                                {proveedores.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.nombre}
-                                  </option>
-                                ))}
-                              </select>
+                {/* CONDICIONES DE COTIZACIÓN: FACTURA / FORMA DE PAGO / COMENTARIOS */}
+                {infoCotizacion?.cotizacion_url && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white border border-slate-100 rounded-2xl px-5 py-4 shadow-sm">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                        Requiere Factura
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            infoCotizacion.requiere_factura
+                              ? "bg-emerald-500"
+                              : "bg-slate-300"
+                          }`}
+                        />
+                        <span className="text-xs font-black uppercase text-slate-800">
+                          {infoCotizacion.requiere_factura === null
+                            ? "—"
+                            : infoCotizacion.requiere_factura
+                              ? "Sí"
+                              : "No"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border border-slate-100 rounded-2xl px-5 py-4 shadow-sm">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                        Forma de Pago
+                      </p>
+                      <span className="text-xs font-black uppercase text-slate-800">
+                        {infoCotizacion.forma_pago
+                          ? infoCotizacion.forma_pago === "contado"
+                            ? "Contado"
+                            : "Crédito"
+                          : "—"}
+                      </span>
+                    </div>
+
+                    <div className="bg-white border border-slate-100 rounded-2xl px-5 py-4 shadow-sm">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                        Condiciones / Comentarios
+                      </p>
+                      <span className="text-[11px] font-bold text-slate-700 line-clamp-3">
+                        {infoCotizacion.condiciones_pago || "Sin comentarios"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {detalles.length > 0 && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between px-2">
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">
+                        Asignación de Costos por Insumo
+                      </h3>
+                      <div className="h-px flex-1 bg-slate-200 mx-4" />
+                    </div>
+
+                    <div className="grid gap-4">
+                      {detalles.map((d) => (
+                        <div
+                          key={d.id}
+                          className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group"
+                        >
+                          <div className="flex flex-col md:flex-row gap-6 items-center">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-black text-red-600 uppercase mb-1">
+                                Insumo Requerido
+                              </p>
+                              <p className="font-black text-slate-800 uppercase text-sm truncate">
+                                {d.insumo}
+                              </p>
+                              <span className="inline-block mt-2 px-3 py-1 bg-slate-100 rounded-lg text-[9px] font-black text-slate-500 uppercase">
+                                CANTIDAD: {d.cantidad}
+                              </span>
                             </div>
-                            <div className="w-full md:w-40">
-                              <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block ml-2">
-                                P. Unitario
-                              </label>
-                              <div className="relative">
-                                <DollarSign
-                                  size={12}
-                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                                />
-                                <Input
-                                  type="number"
-                                  placeholder="0.00"
-                                  className={`h-12 pl-8 rounded-xl border font-black text-xs ${
-                                    excedePrecio(d.id)
-                                      ? "border-red-400 bg-red-50"
-                                      : "border-slate-100 bg-slate-50"
-                                  }`}
+
+                            <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                              <div className="w-full md:w-64">
+                                <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block ml-2">
+                                  Proveedor
+                                </label>
+                                <select
+                                  className="w-full h-12 border-slate-100 bg-slate-50 rounded-xl px-4 text-xs font-bold uppercase"
                                   onChange={(e) =>
                                     setAsignacion(
                                       d.id,
-                                      "precio",
-                                      parseFloat(e.target.value),
+                                      "proveedor_id",
+                                      Number(e.target.value),
                                     )
                                   }
-                                />
-                                {d.precio_estimado && (
-                                  <div className="mt-2 text-[10px] font-bold uppercase">
-                                    <span className="text-slate-400">
-                                      Precio estimado: $
-                                      {d.precio_estimado.toLocaleString(
-                                        "es-MX",
-                                      )}
-                                    </span>
+                                >
+                                  <option value="">Seleccionar...</option>
+                                  {proveedores.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.nombre}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="w-full md:w-40">
+                                <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block ml-2">
+                                  P. Unitario
+                                </label>
+                                <div className="relative">
+                                  <DollarSign
+                                    size={12}
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                                  />
+                                  <Input
+                                    type="number"
+                                    placeholder="0.00"
+                                    className={`h-12 pl-8 rounded-xl border font-black text-xs ${
+                                      excedePrecio(d.id)
+                                        ? "border-red-400 bg-red-50"
+                                        : "border-slate-100 bg-slate-50"
+                                    }`}
+                                    onChange={(e) =>
+                                      setAsignacion(
+                                        d.id,
+                                        "precio",
+                                        parseFloat(e.target.value),
+                                      )
+                                    }
+                                  />
+                                  {d.precio_estimado && (
+                                    <div className="mt-2 text-[10px] font-bold uppercase">
+                                      <span className="text-slate-400">
+                                        Precio estimado: $
+                                        {d.precio_estimado.toLocaleString(
+                                          "es-MX",
+                                        )}
+                                      </span>
 
-                                    {excedePrecio(d.id) && (
-                                      <div className="text-red-600 font-black mt-1">
-                                        ⚠ Precio mayor al estimado de obra
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                      {excedePrecio(d.id) && (
+                                        <div className="text-red-600 font-black mt-1">
+                                          ⚠ Precio mayor al estimado de obra
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
+            {/* FOOTER FIJO (fuera del área scrolleable) */}
             <div className="p-10 bg-white border-t border-slate-100 flex gap-4 justify-end items-center shrink-0">
               <button
-                onClick={() => setOpenCrear(false)}
+                onClick={cerrarModalCrear}
                 className="font-black text-[10px] uppercase text-slate-400 tracking-widest px-6"
               >
                 Descartar
@@ -887,165 +1034,82 @@ const confirmarPago = async () => {
         </DialogContent>
       </Dialog>
 
-      {openPagar && remesaPago && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[2rem] overflow-hidden shadow-2xl">
-            {/* HEADER */}
-            <div className="bg-slate-900 p-8 text-white">
-              <h2 className="text-2xl font-black uppercase tracking-tighter">
-                Pagar Remesa
-              </h2>
+{openPagar && remesaPago && (
+  <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="bg-white w-full max-w-lg rounded-[2rem] overflow-hidden shadow-2xl">
+      {/* HEADER */}
+      <div className="bg-slate-900 p-8 text-white">
+        <h2 className="text-2xl font-black uppercase tracking-tighter">
+          Marcar Pendiente de Pago
+        </h2>
 
-              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 mt-2">
-                Selecciona la cuenta bancaria
-              </p>
-            </div>
+        <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 mt-2">
+          Confirma para enviar esta remesa a espera de pago
+        </p>
+      </div>
 
-            {/* BODY */}
-            <div className="p-8 space-y-6">
-              <div className="bg-slate-50 rounded-2xl p-5">
-                <p className="text-[10px] font-black uppercase text-slate-400">
-                  Remesa
-                </p>
+      {/* BODY */}
+      <div className="p-8 space-y-6">
+        <div className="bg-slate-50 rounded-2xl p-5">
+          <p className="text-[10px] font-black uppercase text-slate-400">
+            Remesa
+          </p>
 
-                <h3 className="text-lg font-black">HGZ.{remesaPago.folio}</h3>
+          <h3 className="text-lg font-black">HGZ.{remesaPago.folio}</h3>
 
-                <p className="text-sm text-slate-500">{remesaPago.proveedor}</p>
+          <p className="text-sm text-slate-500">{remesaPago.proveedor}</p>
 
-                <p className="mt-3 text-2xl font-black text-emerald-600">
-                  $
-                  {remesaPago.monto_total?.toLocaleString("es-MX", {
-                    minimumFractionDigits: 2,
-                  })}
-                </p>
-              </div>
-
-              {/* CUENTA */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Cuenta bancaria
-                </label>
-
-                <select
-                  value={pagoForm.cuenta_id}
-                  onChange={(e) =>
-                    setPagoForm({
-                      ...pagoForm,
-                      cuenta_id: e.target.value,
-                    })
-                  }
-                  className="w-full h-14 rounded-2xl border border-slate-100 bg-slate-50 px-5 font-black text-xs uppercase"
-                >
-                  <option value="">Seleccionar cuenta...</option>
-
-                  {cuentas.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre} — {c.banco} — $
-                      {Number(c.balance).toLocaleString("es-MX", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </option>
-                  ))}
-                </select>
-
-                {cuentaSeleccionada && (
-                  <div
-                    className={`rounded-2xl p-5 border ${
-                      Number(cuentaSeleccionada.balance) >=
-                      remesaPago.monto_total
-                        ? "bg-emerald-50 border-emerald-200"
-                        : "bg-red-50 border-red-200"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Saldo Disponible
-                        </p>
-
-                        <h3
-                          className={`text-2xl font-black mt-1 ${
-                            Number(cuentaSeleccionada.balance) >=
-                            remesaPago.monto_total
-                              ? "text-emerald-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          $
-                          {Number(cuentaSeleccionada.balance).toLocaleString(
-                            "es-MX",
-                            {
-                              minimumFractionDigits: 2,
-                            },
-                          )}
-                        </h3>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Después del pago
-                        </p>
-
-                        <h3 className="text-lg font-black text-slate-700 mt-1">
-                          $
-                          {(
-                            Number(cuentaSeleccionada.balance) -
-                            remesaPago.monto_total
-                          ).toLocaleString("es-MX", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </h3>
-                      </div>
-                    </div>
-
-                    {Number(cuentaSeleccionada.balance) <
-                      remesaPago.monto_total && (
-                      <div className="mt-4 text-[10px] font-black uppercase tracking-widest text-red-600">
-                        ⚠ Fondos insuficientes en esta cuenta
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* CONCEPTO */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Concepto
-                </label>
-
-                <Input
-                  value={pagoForm.concepto}
-                  onChange={(e) =>
-                    setPagoForm({
-                      ...pagoForm,
-                      concepto: e.target.value,
-                    })
-                  }
-                  className="h-14 rounded-2xl border-slate-100 bg-slate-50 font-bold"
-                />
-              </div>
-            </div>
-
-            {/* FOOTER */}
-            <div className="p-8 border-t border-slate-100 flex gap-4 justify-end">
-              <button
-                onClick={() => setOpenPagar(false)}
-                className="h-12 px-6 rounded-xl bg-slate-100 hover:bg-slate-200 font-black text-[10px] uppercase tracking-widest"
-              >
-                Cancelar
-              </button>
-
-              <button
-                onClick={confirmarPago}
-                className="h-12 px-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest"
-              >
-                Confirmar Pago
-              </button>
-            </div>
-          </div>
+          <p className="mt-3 text-2xl font-black text-emerald-600">
+            $
+            {remesaPago.monto_total?.toLocaleString("es-MX", {
+              minimumFractionDigits: 2,
+            })}
+          </p>
         </div>
-      )} 
+
+        {/* CONCEPTO */}
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Concepto (opcional)
+          </label>
+
+          <Input
+            value={pagoForm.concepto}
+            onChange={(e) =>
+              setPagoForm({
+                ...pagoForm,
+                concepto: e.target.value,
+              })
+            }
+            className="h-14 rounded-2xl border-slate-100 bg-slate-50 font-bold"
+          />
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-[10px] font-bold text-amber-700 uppercase tracking-wide">
+          ⚠ Esta acción no realiza el pago todavía. Solo marca la remesa
+          como "Pendiente de Pago" para que tesorería la procese.
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <div className="p-8 border-t border-slate-100 flex gap-4 justify-end">
+        <button
+          onClick={() => setOpenPagar(false)}
+          className="h-12 px-6 rounded-xl bg-slate-100 hover:bg-slate-200 font-black text-[10px] uppercase tracking-widest"
+        >
+          Cancelar
+        </button>
+
+        <button
+          onClick={confirmarPendientePago}
+          className="h-12 px-8 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-[10px] uppercase tracking-widest"
+        >
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }

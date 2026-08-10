@@ -5,6 +5,7 @@ import {
   Pencil,
   Trash2,
   Users,
+  Users2,
   Search,
   Filter,
   Building2,
@@ -62,6 +63,18 @@ export default function ContratistasPage() {
     activo: true,
   });
 
+  // ---- ESTADO TRABAJADORES DE CONTRATISTA ----
+  const [showTrabajadoresModal, setShowTrabajadoresModal] = useState(false);
+  const [contratistaActivo, setContratistaActivo] = useState<any>(null);
+  const [trabajadores, setTrabajadores] = useState<any[]>([]);
+  const [editTrabajador, setEditTrabajador] = useState<any>(null);
+  const [trabajadorForm, setTrabajadorForm] = useState({
+    nombre: "",
+    puesto: "",
+    telefono: "",
+    curp: "",
+  });
+
   useEffect(() => {
     loadData();
     loadEspecialidades();
@@ -110,6 +123,63 @@ export default function ContratistasPage() {
   const remove = async (id: number) => {
     if (!confirm("¿Desactivar contratista?")) return;
     await api.delete(`/contratistas/${id}`);
+    loadData();
+  };
+
+  // ---- FUNCIONES TRABAJADORES DE CONTRATISTA ----
+  const openTrabajadores = async (contratista: any) => {
+    setContratistaActivo(contratista);
+    setEditTrabajador(null);
+    setTrabajadorForm({ nombre: "", puesto: "", telefono: "", curp: "" });
+    setShowTrabajadoresModal(true);
+    await loadTrabajadores(contratista.id);
+  };
+
+  const loadTrabajadores = async (contratistaId: number) => {
+    const res = await api.get(`/contratistas/${contratistaId}/trabajadores`);
+    setTrabajadores(res.data);
+  };
+
+  const saveTrabajador = async () => {
+    if (!contratistaActivo) return;
+
+    if (editTrabajador) {
+      await api.put(
+        `/contratistas/${contratistaActivo.id}/trabajadores/${editTrabajador.id}`,
+        { ...trabajadorForm, activo: true }
+      );
+    } else {
+      await api.post(
+        `/contratistas/${contratistaActivo.id}/trabajadores`,
+        trabajadorForm
+      );
+    }
+
+    setEditTrabajador(null);
+    setTrabajadorForm({ nombre: "", puesto: "", telefono: "", curp: "" });
+    await loadTrabajadores(contratistaActivo.id);
+    loadData(); // refresca el contador en la tabla principal
+  };
+
+  const editingTrabajador = (t: any) => {
+    setEditTrabajador(t);
+    setTrabajadorForm({
+      nombre: t.nombre,
+      puesto: t.puesto || "",
+      telefono: t.telefono || "",
+      curp: t.curp || "",
+    });
+  };
+
+  const cancelEditTrabajador = () => {
+    setEditTrabajador(null);
+    setTrabajadorForm({ nombre: "", puesto: "", telefono: "", curp: "" });
+  };
+
+  const removeTrabajador = async (id: number) => {
+    if (!confirm("¿Desactivar trabajador?")) return;
+    await api.delete(`/contratistas/${contratistaActivo.id}/trabajadores/${id}`);
+    await loadTrabajadores(contratistaActivo.id);
     loadData();
   };
 
@@ -214,6 +284,9 @@ export default function ContratistasPage() {
               <TableHead className="h-16 font-black text-[10px] uppercase tracking-[0.2em] text-slate-400">
                 Contacto
               </TableHead>
+              <TableHead className="h-16 font-black text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                Personal
+              </TableHead>
               <TableHead className="h-16 font-black text-[10px] uppercase tracking-[0.2em] text-slate-400 text-right pr-10">
                 Gestión
               </TableHead>
@@ -263,6 +336,16 @@ export default function ContratistasPage() {
                       <Mail size={12} /> {c.correo}
                     </span>
                   </div>
+                </TableCell>
+
+                <TableCell className="p-5">
+                  <button
+                    onClick={() => openTrabajadores(c)}
+                    className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-xl transition-colors"
+                  >
+                    <Users2 size={12} strokeWidth={2.5} />
+                    {c.trabajadores_count || 0} Trabajadores
+                  </button>
                 </TableCell>
 
                 <TableCell className="text-right pr-10 py-5">
@@ -428,7 +511,7 @@ export default function ContratistasPage() {
             <Button
               variant="ghost"
               onClick={() => setShowModal(false)}
-              className="font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all"
+             className="font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-100 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all outline-none"
             >
               Cancelar
             </Button>
@@ -437,6 +520,156 @@ export default function ContratistasPage() {
               className="bg-red-600 hover:bg-red-700 text-white font-black px-10 rounded-2xl uppercase tracking-widest text-[10px] h-12 shadow-xl shadow-red-100 active:scale-95 transition-all outline-none"
             >
               Guardar Cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL TRABAJADORES DEL CONTRATISTA */}
+      <Dialog open={showTrabajadoresModal} onOpenChange={setShowTrabajadoresModal}>
+        <DialogContent className="max-w-2xl p-0 border-none overflow-hidden rounded-[2.5rem] shadow-2xl">
+          <DialogHeader className="p-10 bg-slate-900 text-white relative">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600" />
+            <DialogTitle className="font-black text-2xl uppercase tracking-tighter flex items-center gap-4">
+              <div className="bg-red-600 p-2 rounded-xl">
+                <Users2 size={22} className="text-white" strokeWidth={2.5} />
+              </div>
+              Trabajadores de {contratistaActivo?.empresa || contratistaActivo?.nombre}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-10 space-y-6 bg-white">
+            {/* FORM AGREGAR / EDITAR */}
+            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                  Nombre
+                </Label>
+                <Input
+                  className="h-11 rounded-xl border-slate-100 bg-white font-bold text-sm outline-none focus-visible:ring-0"
+                  value={trabajadorForm.nombre}
+                  onChange={(e) =>
+                    setTrabajadorForm({ ...trabajadorForm, nombre: e.target.value })
+                  }
+                  placeholder="Nombre del trabajador"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                  Puesto
+                </Label>
+                <Input
+                  className="h-11 rounded-xl border-slate-100 bg-white font-bold text-sm outline-none focus-visible:ring-0"
+                  value={trabajadorForm.puesto}
+                  onChange={(e) =>
+                    setTrabajadorForm({ ...trabajadorForm, puesto: e.target.value })
+                  }
+                  placeholder="Ej. Albañil, Electricista"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                  Teléfono
+                </Label>
+                <Input
+                  className="h-11 rounded-xl border-slate-100 bg-white font-bold text-sm outline-none focus-visible:ring-0"
+                  value={trabajadorForm.telefono}
+                  onChange={(e) =>
+                    setTrabajadorForm({
+                      ...trabajadorForm,
+                      telefono: e.target.value.replace(/\D/g, ""),
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">
+                  CURP
+                </Label>
+                <Input
+                  className="h-11 rounded-xl border-slate-100 bg-white font-bold text-sm outline-none focus-visible:ring-0 uppercase"
+                  value={trabajadorForm.curp}
+                  onChange={(e) =>
+                    setTrabajadorForm({
+                      ...trabajadorForm,
+                      curp: e.target.value.toUpperCase(),
+                    })
+                  }
+                  maxLength={18}
+                />
+              </div>
+
+              <div className="col-span-2 flex justify-end gap-3">
+                {editTrabajador && (
+                  <Button
+                    variant="ghost"
+                    onClick={cancelEditTrabajador}
+                    className="font-black text-[10px] uppercase tracking-widest text-slate-400"
+                  >
+                    Cancelar edición
+                  </Button>
+                )}
+                <Button
+                  onClick={saveTrabajador}
+                  disabled={!trabajadorForm.nombre}
+                  className="bg-red-600 hover:bg-red-700 text-white font-black px-6 rounded-xl uppercase tracking-widest text-[10px] h-11 disabled:opacity-40"
+                >
+                  {editTrabajador ? "Actualizar" : "Agregar Trabajador"}
+                </Button>
+              </div>
+            </div>
+
+            {/* LISTA DE TRABAJADORES */}
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {trabajadores.length === 0 && (
+                <p className="text-center text-[10px] font-black uppercase tracking-widest text-slate-300 py-10">
+                  Sin trabajadores registrados
+                </p>
+              )}
+
+              {trabajadores.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 hover:bg-slate-50/60 transition-all"
+                >
+                  <div>
+                    <p className="font-black text-slate-900 text-sm uppercase tracking-tight">
+                      {t.nombre}
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      {t.puesto || "Sin puesto"} {t.telefono && `· ${t.telefono}`}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => editingTrabajador(t)}
+                      className="h-8 w-8 rounded-lg hover:bg-white hover:text-slate-900"
+                    >
+                      <Pencil size={13} strokeWidth={2.5} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeTrabajador(t.id)}
+                      className="h-8 w-8 rounded-lg hover:bg-white hover:text-red-600"
+                    >
+                      <Trash2 size={13} strokeWidth={2.5} />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter className="p-8 bg-slate-50">
+            <Button
+              variant="ghost"
+              onClick={() => setShowTrabajadoresModal(false)}
+              className="font-black text-[10px] uppercase tracking-widest text-slate-400"
+            >
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>

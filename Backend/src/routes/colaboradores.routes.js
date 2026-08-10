@@ -4,7 +4,7 @@ import {
   editarColaborador, cambiarEstatus,
   subirDocumento, eliminarDocumento,
   getDepartamentos, getPuestos, crearPuesto,
-  upload, getAsignaciones, asignarObra, desasignarObra
+  upload, getAsignaciones, asignarObra, desasignarObra, getCumpleanios
 } from "../controllers/colaboradores.controller.js";
 
 const router = Router();
@@ -17,6 +17,9 @@ router.post("/catalogos/puestos",      crearPuesto);
 // 2️⃣ DOCUMENTOS (rutas estáticas con prefijo fijo)
 router.post("/documentos/subir",  upload.single("file"), subirDocumento);
 router.delete("/documentos/:id",  eliminarDocumento);
+
+// 2.5️⃣ CUMPLEAÑOS (ruta estática, DEBE ir antes de "/:id")
+router.get("/cumpleanios", getCumpleanios);
 
 // 3️⃣ COLABORADORES base
 router.get("/",   getColaboradores);
