@@ -49,6 +49,7 @@ export const getColaboradores = async (req, res) => {
           c.nombre ILIKE $${i}
           OR c.apellido_paterno ILIKE $${i}
           OR c.curp ILIKE $${i}
+          OR c.numero_empleado ILIKE $${i}
         )
       `);
 
@@ -164,7 +165,9 @@ export const getColaborador = async (req, res) => {
 
 // ── CREAR ────────────────────────────────────────────────
 export const crearColaborador = async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
 
     const {
       nombre,
@@ -208,8 +211,15 @@ export const crearColaborador = async (req, res) => {
       ? `/uploads/colaboradores/${req.file.filename}`
       : null;
 
-    const { rows } = await pool.query(`
+    const numeroEmpleadoFinal = (
+      await client.query(
+        "SELECT LPAD(nextval('colaboradores_numero_empleado_seq')::text, 5, '0') AS numero_empleado"
+      )
+    ).rows[0].numero_empleado;
+
+    const { rows } = await client.query(`
       INSERT INTO colaboradores (
+        numero_empleado,
         nombre,
         apellido_paterno,
         apellido_materno,
@@ -246,17 +256,18 @@ export const crearColaborador = async (req, res) => {
         created_by
       )
       VALUES (
-        $1,$2,$3,
-        $4,$5,$6,
-        $7,$8,$9,$10,$11,$12,
-        $13,$14,$15,
-        $16,$17,
-        $18,$19,$20,$21,$22,
-        $23,$24,$25,
-        $26,$27
+        $1,$2,$3,$4,
+        $5,$6,$7,
+        $8,$9,$10,$11,$12,$13,
+        $14,$15,$16,
+        $17,$18,
+        $19,$20,$21,$22,$23,
+        $24,$25,$26,
+        $27,$28
       )
       RETURNING *
     `, [
+      numeroEmpleadoFinal,
       nombre,
       apellido_paterno,
       apellido_materno ?? null,
@@ -305,7 +316,7 @@ export const crearColaborador = async (req, res) => {
 
       for (const h of horariosParseados) {
 
-        await pool.query(`
+        await client.query(`
           INSERT INTO colaboradores_horarios (
             colaborador_id,
             dia_semana,
@@ -322,24 +333,36 @@ export const crearColaborador = async (req, res) => {
       }
     }
 
+    await client.query("COMMIT");
     res.json(colaborador);
 
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
 
-    res.status(500).json({
-      msg: "Error al crear colaborador",
+    const duplicado = err.code === "23505";
+    res.status(duplicado ? 409 : 500).json({
+      msg: duplicado
+        ? "Ya existe un colaborador con alguno de estos datos (número de empleado, CURP, RFC, NSS o correo)"
+        : "Error al crear colaborador",
     });
+  } finally {
+    client.release();
   }
 };
 
 // ── EDITAR ───────────────────────────────────────────────
 export const editarColaborador = async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
 
     const { id } = req.params;
 
     const fields = req.body;
+
+    // El número de empleado es inmutable y solo lo genera el sistema.
+    delete fields.numero_empleado;
 
     // ── FOTO ────────────────────────────────
     if (req.file) {
@@ -369,7 +392,7 @@ export const editarColaborador = async (req, res) => {
       .map((k, i) => `${k} = $${i + 1}`)
       .join(", ");
 
-    const { rows } = await pool.query(`
+    const { rows } = await client.query(`
       UPDATE colaboradores
       SET ${setClause}
       WHERE id = $${keys.length + 1}
@@ -382,14 +405,14 @@ export const editarColaborador = async (req, res) => {
     // ── ACTUALIZAR HORARIOS ─────────────────
     if (horarios) {
 
-      await pool.query(`
+      await client.query(`
         DELETE FROM colaboradores_horarios
         WHERE colaborador_id = $1
       `, [id]);
 
       for (const h of horarios) {
 
-        await pool.query(`
+        await client.query(`
           INSERT INTO colaboradores_horarios (
             colaborador_id,
             dia_semana,
@@ -406,14 +429,21 @@ export const editarColaborador = async (req, res) => {
       }
     }
 
+    await client.query("COMMIT");
     res.json(rows[0]);
 
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
 
-    res.status(500).json({
-      msg: "Error al editar",
+    const duplicado = err.code === "23505";
+    res.status(duplicado ? 409 : 500).json({
+      msg: duplicado
+        ? "Ya existe otro colaborador con alguno de estos datos (número de empleado, CURP, RFC, NSS o correo)"
+        : "Error al editar colaborador",
     });
+  } finally {
+    client.release();
   }
 };
 

@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.use(helmet());
 
 app.use(cors({
-  origin: process.env.APP_URL || "http://192.168.100.233:8080",  
+  origin: process.env.APP_URL,  
   credentials: true
 }));
 

@@ -38,6 +38,7 @@ interface Periodo {
 interface Detalle {
   id: number;
   colaborador_id: string;
+  numero_empleado: string;
   colaborador_nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
@@ -622,6 +623,9 @@ export default function NominaDetalle() {
                       </div>
                     )}
                     <div className="min-w-0">
+                      <p className="font-mono text-[8px] font-black uppercase tracking-widest text-red-500">
+                        {d.numero_empleado ?? "Sin número"}
+                      </p>
                       <p className="font-black text-xs text-slate-800 uppercase truncate">
                         {d.colaborador_nombre} {d.apellido_paterno}
                       </p>

@@ -69,6 +69,7 @@ export const getPeriodo = async (req, res) => {
       `
       SELECT
         nd.*,
+        c.numero_empleado,
         c.nombre        AS colaborador_nombre,
         c.apellido_paterno,
         c.apellido_materno,

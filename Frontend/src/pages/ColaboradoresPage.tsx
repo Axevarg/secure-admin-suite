@@ -16,6 +16,7 @@ import {
 
 interface Colaborador {
   id: string;
+  numero_empleado: string;
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
@@ -157,7 +158,7 @@ export default function ColaboradoresLista() {
             size={16}
           />
           <Input
-            placeholder="Buscar por nombre o CURP..."
+            placeholder="Buscar por nombre, número de empleado o CURP..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50 font-bold text-xs uppercase tracking-wide"
@@ -222,6 +223,11 @@ export default function ColaboradoresLista() {
                     />
                   </div>
                   <div className="min-w-0 flex-1">
+                    <div className="mb-1.5 inline-flex rounded-lg bg-red-50 px-2.5 py-1">
+                      <p className="font-mono text-sm font-black tracking-[0.12em] text-red-600">
+                        {c.numero_empleado ?? "Sin número"}
+                      </p>
+                    </div>
                     <h2 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-tight truncate">
                       {c.nombre} {c.apellido_paterno} {c.apellido_materno}
                     </h2>

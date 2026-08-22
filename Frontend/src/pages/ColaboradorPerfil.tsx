@@ -10,6 +10,7 @@ import {
 
 interface Colaborador {
   id: string;
+  numero_empleado?: string;
   nombre: string;
   apellido_paterno: string;
   apellido_materno?: string;
@@ -85,7 +86,8 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? "http://192.168.100.233:3000";
 
 const TIPOS_DOC = [
   "ine", "curp", "nss", "comprobante_domicilio",
-  "acta_nacimiento", "contrato", "otro",
+  "acta_nacimiento", "contrato", "carta_recomendacion",
+  "comprobante_estudios", "cedula", "otro",
 ];
 
 const ESTATUS_CONFIG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -373,6 +375,7 @@ export default function ColaboradorPerfil() {
               { label: "Fecha de nacimiento", value: colaborador.fecha_nacimiento ? new Date(colaborador.fecha_nacimiento).toLocaleDateString("es-MX") : "—" },
               { label: "Sexo", value: colaborador.sexo },
               { label: "Estado civil", value: colaborador.estado_civil },
+              { label: "Número de empleado", value: colaborador.numero_empleado, mono: true },
               { label: "CURP", value: colaborador.curp, mono: true },
               { label: "RFC", value: colaborador.rfc, mono: true },
               { label: "NSS", value: colaborador.nss, mono: true },

@@ -60,6 +60,25 @@ const DIAS = [
   "domingo",
 ];
 
+const HORARIO_INICIAL: Horario[] = DIAS.map((dia) => ({
+  dia_semana: dia,
+  hora_entrada: dia === "domingo" ? "" : "09:00",
+  hora_salida: dia === "sabado" ? "14:00" : dia === "domingo" ? "" : "19:00",
+}));
+
+const CAMPOS_POR_PASO = [
+  [
+    "nombre", "apellido_paterno", "apellido_materno", "fecha_nacimiento",
+    "sexo", "estado_civil", "curp", "rfc", "nss", "telefono", "email", "direccion",
+  ],
+  ["departamento_id", "puesto_id", "fecha_ingreso", "tipo_contrato", "turno"],
+  ["salario_diario", "forma_pago", "banco", "clabe", "numero_cuenta"],
+  [
+    "contacto_emergencia_nombre", "contacto_emergencia_telefono",
+    "contacto_emergencia_relacion",
+  ],
+] as const;
+
 const Field = ({
   label,
   children,
@@ -89,6 +108,8 @@ export default function ColaboradorForm() {
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | undefined>(id);
+  const [savedSteps, setSavedSteps] = useState<number[]>([]);
 
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState("");
@@ -96,13 +117,7 @@ export default function ColaboradorForm() {
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
   const [puestos, setPuestos] = useState<Puesto[]>([]);
 
-  const [horarios, setHorarios] = useState<Horario[]>(
-    DIAS.map((d) => ({
-      dia_semana: d,
-      hora_entrada: "",
-      hora_salida: "",
-    })),
-  );
+  const [horarios, setHorarios] = useState<Horario[]>(HORARIO_INICIAL);
 
   const [form, setForm] = useState({
     // PERSONAL
@@ -272,49 +287,65 @@ export default function ColaboradorForm() {
     setFotoPreview(URL.createObjectURL(f));
   };
 
-  const handleSave = async () => {
+  const guardarPasoActual = async () => {
     if (!form.nombre || !form.apellido_paterno) {
-      return alert("Nombre y apellido son requeridos");
+      alert("Nombre y apellido son requeridos");
+      return false;
     }
 
     setSaving(true);
 
     try {
-      const user = JSON.parse(
-        sessionStorage.getItem("user") || "{}",
-      );
+      const storage = localStorage.getItem("user") ? localStorage : sessionStorage;
+      const user = JSON.parse(storage.getItem("user") || "{}");
 
       const fd = new FormData();
 
-      Object.entries(form).forEach(([k, v]) => {
-        if (v) fd.append(k, v);
+      CAMPOS_POR_PASO[step].forEach((campo) => {
+        const valor = form[campo];
+        if (valor !== "") fd.append(campo, valor);
       });
 
-      const horariosValidos = horarios.filter(
-        (h) => h.hora_entrada && h.hora_salida,
-      );
+      if (step === 1) {
+        const horariosValidos = horarios.filter((h) => h.hora_entrada && h.hora_salida);
+        fd.append("horarios", JSON.stringify(horariosValidos));
+      }
 
-      fd.append(
-        "horarios",
-        JSON.stringify(horariosValidos),
-      );
+      if (!savedId && user.id) fd.append("usuario_id", String(user.id));
 
-      fd.append("usuario_id", user.id ?? "");
-
-      if (foto) {
+      if (step === 0 && foto) {
         fd.append("foto", foto);
       }
 
-      if (isEdit) {
-        await api.put(`/colaboradores/${id}`, fd);
+      let colaboradorId = savedId;
+
+      if (colaboradorId) {
+        await api.put(`/colaboradores/${colaboradorId}`, fd);
       } else {
-        await api.post("/colaboradores", fd);
+        const respuesta = await api.post("/colaboradores", fd);
+        colaboradorId = String(respuesta.data.id);
+        setSavedId(colaboradorId);
+        setFoto(null);
+        navigate(`/colaboradores/${colaboradorId}/editar`, { replace: true });
       }
 
-      navigate("/colaboradores");
+      setSavedSteps((prev) => prev.includes(step) ? prev : [...prev, step]);
+      return true;
+    } catch (error: any) {
+      const mensaje = error.response?.data?.msg || "No fue posible guardar esta sección";
+      alert(mensaje);
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleContinue = async () => {
+    const guardado = await guardarPasoActual();
+    if (!guardado) return;
+
+    if (isLastStep) navigate("/colaboradores");
+    else setStep((actual) => actual + 1);
   };
 
   const isLastStep = step === STEPS.length - 1;
@@ -367,7 +398,7 @@ export default function ColaboradorForm() {
                   : "text-slate-300 cursor-default"
             }`}
           >
-            {i < step ? <Check size={14} /> : s.icon}
+            {savedSteps.includes(i) || i < step ? <Check size={14} /> : s.icon}
 
             <span className="hidden sm:inline">
               {s.label}
@@ -972,11 +1003,7 @@ export default function ColaboradorForm() {
         </button>
 
         <button
-          onClick={() =>
-            isLastStep
-              ? handleSave()
-              : setStep(step + 1)
-          }
+          onClick={handleContinue}
           disabled={saving}
           className="h-14 px-10 rounded-2xl bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white font-black text-[10px] uppercase tracking-widest transition-colors shadow-xl shadow-red-900/20 flex items-center gap-2"
         >
@@ -986,13 +1013,13 @@ export default function ColaboradorForm() {
             <>
               <Check size={16} />
 
-              {isEdit
+              {savedId
                 ? "Guardar Cambios"
                 : "Registrar Colaborador"}
             </>
           ) : (
             <>
-              Siguiente
+              Guardar y continuar
               <ArrowRight size={16} />
             </>
           )}
