@@ -47,7 +47,7 @@ export default function ObraPersonalPage() {
         rol: ""
     });
 
-    useEffect(() => { loadAll(); }, []);
+    useEffect(() => { loadAll(); }, [id]);
 
     const loadAll = async () => {
         try {
@@ -73,12 +73,26 @@ export default function ObraPersonalPage() {
     });
 
     const asignarTrabajador = async () => {
-        await api.post(`/obras/${id}/trabajadores`, {
-            ...formTrab,
-            trabajador_id: Number(formTrab.trabajador_id)
-        });
-        setModalTrab(false);
-        loadAll();
+        if (!formTrab.trabajador_id) {
+            alert("Selecciona un trabajador");
+            return;
+        }
+
+        try {
+            await api.post(`/obras/${id}/trabajadores`, {
+                ...formTrab,
+                trabajador_id: Number(formTrab.trabajador_id)
+            });
+            setModalTrab(false);
+            setFormTrab({ trabajador_id: "", fecha_inicio: "", rol: "" });
+            await loadAll();
+        } catch (error: any) {
+            alert(
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                "No fue posible asignar el trabajador"
+            );
+        }
     };
 
     const quitarTrabajador = async (asigId: number) => {
@@ -324,7 +338,7 @@ export default function ObraPersonalPage() {
                     </div>
                     <DialogFooter className="p-8 bg-slate-50 gap-3">
                         <Button variant="ghost" onClick={() => setModalTrab(false)} className="font-black text-[10px] uppercase text-slate-400">Cancelar</Button>
-                        <Button onClick={asignarTrabajador} className="bg-red-600 hover:bg-red-700 text-white font-black px-8 rounded-xl uppercase tracking-widest text-[10px] h-12 shadow-xl shadow-red-100 transition-all border-none ring-0">Confirmar Asignación</Button>
+                        <Button disabled={!formTrab.trabajador_id} onClick={asignarTrabajador} className="bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white font-black px-8 rounded-xl uppercase tracking-widest text-[10px] h-12 shadow-xl shadow-red-100 transition-all border-none ring-0">Confirmar Asignación</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

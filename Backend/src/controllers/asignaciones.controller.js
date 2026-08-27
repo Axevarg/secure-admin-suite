@@ -117,6 +117,12 @@ export const asignarTrabajador = async (req, res) => {
     const { id } = req.params; // obra_id
     const { trabajador_id, fecha_inicio, rol } = req.body;
 
+    if (!trabajador_id) {
+      return res.status(400).json({
+        error: "Selecciona un trabajador"
+      });
+    }
+
     // 🔎 1. VERIFICAR SI YA ESTÁ ASIGNADO A OTRA OBRA
     const check = await pool.query(`
       SELECT *
@@ -132,10 +138,7 @@ export const asignarTrabajador = async (req, res) => {
       });
     }
 
-        // 🔥 FIX CRÍTICO
-    if (!fecha_inicio || fecha_inicio === "") {
-      fecha_inicio = null;
-    }
+    const fechaInicio = fecha_inicio || null;
 
     // 🧱 2. INSERTAR ASIGNACIÓN
     const result = await pool.query(`
@@ -143,7 +146,7 @@ export const asignarTrabajador = async (req, res) => {
       (obra_id, trabajador_id, fecha_inicio, rol, activo)
       VALUES ($1,$2,$3,$4,true)
       RETURNING *
-    `, [id, trabajador_id, fecha_inicio, rol]);
+    `, [id, trabajador_id, fechaInicio, rol || null]);
 
     res.json(result.rows[0]);
 
@@ -158,10 +161,7 @@ export const updateAsignacionTrabajador = async (req, res) => {
     const { id } = req.params;
     const { fecha_fin, rol, activo } = req.body;
 
-  // 🔥 FIX FECHA FIN
-    if (!fecha_fin || fecha_fin === "") {
-      fecha_fin = null;
-    }
+    const fechaFin = fecha_fin || null;
 
     const result = await pool.query(`
       UPDATE trabajadores_asignados
@@ -171,7 +171,7 @@ export const updateAsignacionTrabajador = async (req, res) => {
         activo = $3
       WHERE id = $4
       RETURNING *
-    `, [fecha_fin, rol, activo, id]);
+    `, [fechaFin, rol, activo, id]);
 
     res.json(result.rows[0]);
   } catch (err) {

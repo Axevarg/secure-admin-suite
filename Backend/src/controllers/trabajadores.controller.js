@@ -103,10 +103,11 @@ export const getTrabajadoresDisponibles = async (req, res) => {
       FROM trabajadores t
       LEFT JOIN especialidades e ON e.id = t.especialidad_id
       WHERE t.activo = true
-      AND t.id NOT IN (
-        SELECT trabajador_id
-        FROM trabajadores_asignados
-        WHERE activo = true
+      AND NOT EXISTS (
+        SELECT 1
+        FROM trabajadores_asignados ta
+        WHERE ta.trabajador_id = t.id
+          AND ta.activo = true
       )
       ORDER BY t.nombre ASC
     `);
