@@ -76,7 +76,12 @@ export default function AsistenciaPage() {
     try {
       setLoading(true);
       const res = await api.get(`/asistencias/obra/${id}?fecha=${fecha}`);
-      setRows(res.data);
+      setRows(
+        res.data.map((registro: TrabajadorRow) => ({
+          ...registro,
+          horas_extra: Number(registro.horas_extra || 0),
+        })),
+      );
     } catch (err) {
       console.error("Error al cargar datos:", err);
     } finally {
@@ -445,7 +450,11 @@ export default function AsistenciaPage() {
           </div>
 
           <p className="text-3xl font-black text-blue-600">
-            {rows.reduce((t, r) => t + (r.horas_extra || 0), 0)}
+            {rows
+              .reduce((total, registro) => {
+                return total + Number(registro.horas_extra || 0);
+              }, 0)
+              .toLocaleString("es-MX", { maximumFractionDigits: 2 })}
           </p>
 
           <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-blue-700">
