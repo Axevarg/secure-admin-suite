@@ -24,7 +24,7 @@ import {
   ArrowLeft,
   Landmark,
   ChevronDown, ClipboardCheck, Banknote, ShieldCheck, Wallet, ArrowRightLeft,
-  Coins, Cake
+  Coins, Cake, Smartphone
 } from "lucide-react";
 
 import { NavLink } from "@/components/NavLink";
@@ -139,6 +139,12 @@ const systemNav = [
     title: "Cumpleaños",
     url: "/cumpleanos",
     icon: Cake
+  },
+  {
+    title: "Prueba móvil",
+    url: "/prueba-movil",
+    icon: Smartphone,
+    perm: "dashboard:view",
   },
   {
     title: "Nomina",

@@ -38,6 +38,7 @@ import ColaboradorForm from "./pages/ColaboradorForm";
 import NominaLista from "./pages/Nominalista";
 import NominaDetalle from "./pages/Nominadetalle";
 import CumpleanosPage from "@/pages/CumpleanosPage";
+import PruebaMovilPage from "@/pages/PruebaMovilPage";
 
 const queryClient = new QueryClient();
 
@@ -110,6 +111,14 @@ const App = () => (
             />
 
             <Route path="/cumpleanos" element={<CumpleanosPage />} />
+            <Route
+              path="/prueba-movil"
+              element={
+                <ProtectedRoute permission="dashboard:view">
+                  <PruebaMovilPage />
+                </ProtectedRoute>
+              }
+            />
             {/* Obras */}
             <Route
               path="/obras"
