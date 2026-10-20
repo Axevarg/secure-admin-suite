@@ -23,7 +23,7 @@ import bancosRouter from "./routes/bancos.routes.js";
 import colaboradoresRouter from "./routes/colaboradores.routes.js";
 import nominaRouter from "./routes/nomina.routes.js";
 import indirectosRoutes from "./routes/indirectos.routes.js";
-import pruebasMovilRoutes from "./routes/pruebasMovil.routes.js";
+import biometriaRoutes from "./routes/biometria.routes.js";
 import cors from "cors";
 
 app.use(cors({
@@ -52,7 +52,7 @@ app.use("/bancos", bancosRouter);
 app.use("/colaboradores", colaboradoresRouter);
 app.use("/nomina", nominaRouter);
 app.use("/indirectos", indirectosRoutes);
-app.use("/prueba-movil", pruebasMovilRoutes);
+app.use("/biometria", biometriaRoutes);
 app.use(express.json());
 app.use("/uploads", (req, res, next) => {
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");

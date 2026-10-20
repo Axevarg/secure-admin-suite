@@ -27,16 +27,36 @@ import {
   ChevronRight,
   Clock3,
   Users,
+  Lock,
+  ScanFace,
+  Hand,
 } from "lucide-react";
 
 interface TrabajadorRow {
   trabajador_id: number;
   nombre: string;
   estado?: "asistio" | "tarde" | "falta";
-  hora_entrada?: string;
-  hora_salida?: string;
+  hora_entrada?: string | null;
+  hora_salida?: string | null;
+  horas_trabajadas?: number;
   horas_extra?: number;
+  justificacion?: string | null;
+  metodo_entrada?: "facial" | "manual" | null;
+  metodo_salida?: "facial" | "manual" | null;
 }
+
+type EstadoDia = "asistio" | "tarde" | "falta" | "pendiente";
+
+// La asistencia la registra la app móvil con reconocimiento facial;
+// aquí solo se muestra y se agrega una justificación.
+const estadoDe = (t: TrabajadorRow, diaCerrado: boolean): EstadoDia => {
+  if (t.hora_entrada || t.hora_salida) {
+    return t.estado === "tarde" ? "tarde" : "asistio";
+  }
+  return t.estado === "falta" || diaCerrado ? "falta" : "pendiente";
+};
+
+const formatoHora = (hora?: string | null) => (hora ? hora.slice(0, 5) : "--:--");
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -48,6 +68,7 @@ export default function AsistenciaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
   const [openReportes, setOpenReportes] = useState(false);
@@ -80,6 +101,8 @@ export default function AsistenciaPage() {
         res.data.map((registro: TrabajadorRow) => ({
           ...registro,
           horas_extra: Number(registro.horas_extra || 0),
+          horas_trabajadas: Number(registro.horas_trabajadas || 0),
+          justificacion: registro.justificacion || "",
         })),
       );
     } catch (err) {
@@ -112,29 +135,6 @@ export default function AsistenciaPage() {
   );
 
   // Actualización por ID para que el buscador no afecte los índices
-  const setEstado = (
-    trabajadorId: number,
-    estado: "asistio" | "tarde" | "falta",
-  ) => {
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.trabajador_id !== trabajadorId) return r;
-
-        const newRow = { ...r, estado };
-        if (estado === "falta") {
-          newRow.hora_entrada = "";
-          newRow.hora_salida = "";
-          newRow.horas_extra = 0;
-        } else {
-          newRow.hora_entrada = r.hora_entrada || "08:00";
-          newRow.hora_salida = r.hora_salida || "17:00";
-          newRow.horas_extra = r.horas_extra || 0;
-        }
-        return newRow;
-      }),
-    );
-  };
-
   const updateField = (
     trabajadorId: number,
     field: keyof TrabajadorRow,
@@ -169,17 +169,44 @@ export default function AsistenciaPage() {
   const guardar = async () => {
     try {
       setSaving(true);
-      await api.post("/asistencias/guardar-dia", {
+      await api.post("/asistencias/justificaciones", {
         obra_id: id,
         fecha,
-        registros: rows,
+        justificaciones: rows
+          .filter((r) => (r.justificacion || "").trim() !== "")
+          .map((r) => ({
+            trabajador_id: r.trabajador_id,
+            justificacion: r.justificacion,
+          })),
       });
-      alert("Asistencia guardada con éxito ✔");
+      alert("Justificaciones guardadas ✔");
+      loadData();
     } catch (err) {
       console.error(err);
-      alert("Error al guardar asistencia");
+      alert("Error al guardar justificaciones");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const cerrar = async () => {
+    if (
+      !confirm(
+        "Al cerrar el día, quien no tenga marcas quedará con falta y ya no se podrán agregar justificaciones ni recibir marcas de la app para esta fecha. ¿Continuar?",
+      )
+    )
+      return;
+
+    try {
+      setClosing(true);
+      await api.post("/asistencias/cerrar-dia", { obra_id: id, fecha });
+      await loadData();
+      await verificarCierre();
+    } catch (err) {
+      console.error(err);
+      alert("Error al cerrar el día");
+    } finally {
+      setClosing(false);
     }
   };
 
@@ -225,19 +252,33 @@ export default function AsistenciaPage() {
             onChange={(e) => setFecha(e.target.value)}
             className="bg-transparent border-none text-slate-900 font-black text-xs uppercase focus-visible:ring-0 w-full sm:w-40 h-10"
           />
-          {!diaCerrado && (
-            <Button
-              onClick={guardar}
-              disabled={saving}
-              className="bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] h-10 px-6 rounded-xl transition-all shadow-lg shadow-red-900/20"
-            >
-              {saving ? (
-                <Timer className="animate-spin mr-2" size={14} />
-              ) : (
-                <Save size={14} className="mr-2" strokeWidth={3} />
-              )}
-              {saving ? "..." : "Guardar"}
-            </Button>
+          {!diaCerrado ? (
+            <>
+              <Button
+                onClick={guardar}
+                disabled={saving || closing}
+                className="bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] h-10 px-6 rounded-xl transition-all shadow-lg shadow-red-900/20"
+              >
+                {saving ? (
+                  <Timer className="animate-spin mr-2" size={14} />
+                ) : (
+                  <Save size={14} className="mr-2" strokeWidth={3} />
+                )}
+                {saving ? "..." : "Guardar"}
+              </Button>
+              <Button
+                onClick={cerrar}
+                disabled={saving || closing}
+                className="bg-slate-900 hover:bg-slate-700 text-white font-black uppercase text-[10px] h-10 px-6 rounded-xl transition-all"
+              >
+                <Lock size={14} className="mr-2" strokeWidth={3} />
+                {closing ? "..." : "Cerrar día"}
+              </Button>
+            </>
+          ) : (
+            <span className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 px-4">
+              <Lock size={14} /> Día cerrado
+            </span>
           )}
         </div>
       </div>
@@ -386,7 +427,7 @@ export default function AsistenciaPage() {
           </div>
 
           <p className="text-3xl font-black text-green-600">
-            {rows.filter((r) => r.estado === "asistio").length}
+            {rows.filter((r) => estadoDe(r, diaCerrado) === "asistio").length}
           </p>
 
           <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-green-700">
@@ -396,7 +437,7 @@ export default function AsistenciaPage() {
           <span className="text-[11px] text-slate-400 font-bold">
             {rows.length
               ? Math.round(
-                  (rows.filter((r) => r.estado === "asistio").length /
+                  (rows.filter((r) => estadoDe(r, diaCerrado) === "asistio").length /
                     rows.length) *
                     100,
                 )
@@ -412,7 +453,7 @@ export default function AsistenciaPage() {
           </div>
 
           <p className="text-3xl font-black text-amber-500">
-            {rows.filter((r) => r.estado === "tarde").length}
+            {rows.filter((r) => estadoDe(r, diaCerrado) === "tarde").length}
           </p>
 
           <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-amber-600">
@@ -431,7 +472,7 @@ export default function AsistenciaPage() {
           </div>
 
           <p className="text-3xl font-black text-red-600">
-            {rows.filter((r) => r.estado === "falta").length}
+            {rows.filter((r) => estadoDe(r, diaCerrado) === "falta").length}
           </p>
 
           <p className="mt-2 text-[10px] uppercase font-black tracking-[0.25em] text-red-600">
@@ -507,7 +548,10 @@ export default function AsistenciaPage() {
                   Estado
                 </th>
                 <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                  Horario / Extras
+                  Entrada / Salida / Horas
+                </th>
+                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                  Justificación
                 </th>
               </tr>
             </thead>
@@ -528,54 +572,21 @@ export default function AsistenciaPage() {
                     </div>
                   </td>
                   <td className="px-8 py-5">
-                    <div className="flex justify-center gap-3">
-                      <StatusButton
-                        active={t.estado === "asistio"}
-                        type="asistio"
-                        onClick={() => setEstado(t.trabajador_id, "asistio")}
-                      />
-                      <StatusButton
-                        active={t.estado === "tarde"}
-                        type="tarde"
-                        onClick={() => setEstado(t.trabajador_id, "tarde")}
-                      />
-                      <StatusButton
-                        active={t.estado === "falta"}
-                        type="falta"
-                        onClick={() => setEstado(t.trabajador_id, "falta")}
-                      />
+                    <div className="flex justify-center">
+                      <EstadoBadge estado={estadoDe(t, diaCerrado)} />
                     </div>
                   </td>
                   <td className="px-8 py-5">
-                    {t.estado === "asistio" || t.estado === "tarde" ? (
-                      <div className="flex gap-3">
-                        <InputTime
-                          value={t.hora_entrada}
-                          label="Entrada"
-                          onChange={(v: string) =>
-                            updateField(t.trabajador_id, "hora_entrada", v)
-                          }
-                        />
-                        <InputTime
-                          value={t.hora_salida}
-                          label="Salida"
-                          onChange={(v: string) =>
-                            updateField(t.trabajador_id, "hora_salida", v)
-                          }
-                        />
-                        <InputNumber
-                          value={t.horas_extra}
-                          label="Extras"
-                          onChange={(v: number) =>
-                            updateField(t.trabajador_id, "horas_extra", v)
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-[10px] font-black text-slate-300 uppercase italic tracking-tighter px-4">
-                        Sin actividad
-                      </span>
-                    )}
+                    <Marcas t={t} />
+                  </td>
+                  <td className="px-8 py-5">
+                    <JustificacionInput
+                      value={t.justificacion}
+                      disabled={diaCerrado}
+                      onChange={(v: string) =>
+                        updateField(t.trabajador_id, "justificacion", v)
+                      }
+                    />
                   </td>
                 </tr>
               ))}
@@ -592,56 +603,28 @@ export default function AsistenciaPage() {
             >
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-2 h-8 rounded-full ${t.estado === "asistio" ? "bg-green-500" : t.estado === "tarde" ? "bg-amber-500" : t.estado === "falta" ? "bg-red-600" : "bg-slate-200"}`}
+                  className={`w-2 h-8 rounded-full ${estadoDe(t, diaCerrado) === "asistio" ? "bg-green-500" : estadoDe(t, diaCerrado) === "tarde" ? "bg-amber-500" : estadoDe(t, diaCerrado) === "falta" ? "bg-red-600" : "bg-slate-200"}`}
                 />
                 <h3 className="font-black text-slate-900 uppercase text-base tracking-tight">
                   {t.nombre}
                 </h3>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <MobileStatusButton
-                  active={t.estado === "asistio"}
-                  type="asistio"
-                  onClick={() => setEstado(t.trabajador_id, "asistio")}
-                />
-                <MobileStatusButton
-                  active={t.estado === "tarde"}
-                  type="tarde"
-                  onClick={() => setEstado(t.trabajador_id, "tarde")}
-                />
-                <MobileStatusButton
-                  active={t.estado === "falta"}
-                  type="falta"
-                  onClick={() => setEstado(t.trabajador_id, "falta")}
-                />
+              <div className="flex items-center justify-between gap-3">
+                <EstadoBadge estado={estadoDe(t, diaCerrado)} />
               </div>
 
-              {(t.estado === "asistio" || t.estado === "tarde") && (
-                <div className="grid grid-cols-3 gap-2 pt-2 bg-slate-50 p-3 rounded-2xl border border-dashed border-slate-200">
-                  <InputTime
-                    value={t.hora_entrada}
-                    label="Entrada"
-                    onChange={(v: string) =>
-                      updateField(t.trabajador_id, "hora_entrada", v)
-                    }
-                  />
-                  <InputTime
-                    value={t.hora_salida}
-                    label="Salida"
-                    onChange={(v: string) =>
-                      updateField(t.trabajador_id, "hora_salida", v)
-                    }
-                  />
-                  <InputNumber
-                    value={t.horas_extra}
-                    label="Ext"
-                    onChange={(v: number) =>
-                      updateField(t.trabajador_id, "horas_extra", v)
-                    }
-                  />
-                </div>
-              )}
+              <div className="bg-slate-50 p-3 rounded-2xl border border-dashed border-slate-200">
+                <Marcas t={t} />
+              </div>
+
+              <JustificacionInput
+                value={t.justificacion}
+                disabled={diaCerrado}
+                onChange={(v: string) =>
+                  updateField(t.trabajador_id, "justificacion", v)
+                }
+              />
             </div>
           ))}
         </div>
@@ -690,79 +673,85 @@ const ReportButton = ({
   </button>
 );
 
-const StatusButton = ({ active, type, onClick }: any) => {
+const EstadoBadge = ({ estado }: { estado: EstadoDia }) => {
   const configs = {
     asistio: {
-      bg: "bg-green-600",
+      cls: "bg-green-600 text-white",
       icon: <CheckCircle2 size={14} />,
       label: "Asistió",
     },
-    tarde: { bg: "bg-amber-500", icon: <Timer size={14} />, label: "Tarde" },
-    falta: { bg: "bg-red-600", icon: <XCircle size={14} />, label: "Falta" },
+    tarde: {
+      cls: "bg-amber-500 text-white",
+      icon: <Timer size={14} />,
+      label: "Tarde",
+    },
+    falta: {
+      cls: "bg-red-600 text-white",
+      icon: <XCircle size={14} />,
+      label: "Falta",
+    },
+    pendiente: {
+      cls: "bg-slate-100 text-slate-400",
+      icon: <Clock3 size={14} />,
+      label: "Sin marca",
+    },
   };
-  const c = configs[type as keyof typeof configs];
+  const c = configs[estado];
   return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border-2 ${
-        active
-          ? `${c.bg} text-white border-transparent shadow-md scale-105`
-          : "bg-white text-slate-400 border-slate-100 hover:border-slate-200"
-      }`}
+    <span
+      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${c.cls}`}
     >
       {c.icon} {c.label}
-    </button>
+    </span>
   );
 };
 
-const MobileStatusButton = ({ active, type, onClick }: any) => {
-  const configs = {
-    asistio: { bg: "bg-green-600", icon: <CheckCircle2 size={18} /> },
-    tarde: { bg: "bg-amber-500", icon: <Timer size={18} /> },
-    falta: { bg: "bg-red-600", icon: <XCircle size={18} /> },
-  };
-  const c = configs[type as keyof typeof configs];
-  return (
-    <button
-      onClick={onClick}
-      className={`py-4 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 border-2 ${
-        active
-          ? `${c.bg} text-white border-transparent shadow-lg`
-          : "bg-slate-50 text-slate-300 border-slate-50"
-      }`}
-    >
-      {c.icon}
-      <span className="text-[8px] font-black uppercase">{type}</span>
-    </button>
-  );
-};
+const MetodoIcono = ({ metodo }: { metodo?: string | null }) =>
+  metodo === "facial" ? (
+    <ScanFace size={12} className="text-green-600" aria-label="Reconocimiento facial" />
+  ) : metodo === "manual" ? (
+    <Hand size={12} className="text-slate-400" aria-label="Manual" />
+  ) : null;
 
-const InputTime = ({ value, label, onChange }: any) => (
-  <div className="flex-1 bg-slate-50 p-2 rounded-xl border border-slate-100">
-    <label className="text-[7px] font-black uppercase text-slate-400 block mb-1 tracking-tighter">
-      {label}
-    </label>
-    <input
-      type="time"
-      value={value || ""}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-transparent border-none font-black text-[11px] outline-none text-slate-700"
-    />
+const Marcas = ({ t }: { t: TrabajadorRow }) => (
+  <div className="flex gap-3">
+    <DatoLectura label="Entrada">
+      {formatoHora(t.hora_entrada)}
+      {t.hora_entrada && <MetodoIcono metodo={t.metodo_entrada} />}
+    </DatoLectura>
+    <DatoLectura label="Salida">
+      {formatoHora(t.hora_salida)}
+      {t.hora_salida && <MetodoIcono metodo={t.metodo_salida} />}
+    </DatoLectura>
+    <DatoLectura label="Horas">
+      {Number(t.horas_trabajadas || 0).toLocaleString("es-MX", {
+        maximumFractionDigits: 2,
+      })}
+    </DatoLectura>
   </div>
 );
 
-const InputNumber = ({ value, label, onChange }: any) => (
-  <div className="w-16 bg-slate-50 p-2 rounded-xl border border-slate-100">
-    <label className="text-[7px] font-black uppercase text-slate-400 block mb-1 tracking-tighter text-center">
+const DatoLectura = ({ label, children }: any) => (
+  <div className="flex-1 bg-slate-50 p-2 rounded-xl border border-slate-100">
+    <span className="text-[7px] font-black uppercase text-slate-400 block mb-1 tracking-tighter">
       {label}
-    </label>
-    <input
-      type="number"
-      value={value || ""}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="w-full bg-transparent border-none font-black text-[11px] outline-none text-center text-slate-700"
-    />
+    </span>
+    <span className="flex items-center gap-1 font-black text-[11px] text-slate-700">
+      {children}
+    </span>
   </div>
+);
+
+const JustificacionInput = ({ value, disabled, onChange }: any) => (
+  <textarea
+    value={value || ""}
+    disabled={disabled}
+    maxLength={500}
+    rows={2}
+    placeholder={disabled ? "" : "Agregar justificación..."}
+    onChange={(e) => onChange(e.target.value)}
+    className="w-full min-w-[220px] bg-slate-50 p-3 rounded-xl border border-slate-100 text-[11px] font-bold text-slate-700 outline-none focus:border-red-300 resize-none disabled:opacity-60"
+  />
 );
 
 const ResumenItem = ({ label, count, color }: any) => (

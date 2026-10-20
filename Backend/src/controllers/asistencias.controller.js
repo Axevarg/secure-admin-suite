@@ -14,7 +14,11 @@ export const getAsistenciaDia = async (req, res) => {
         a.estado,
         a.hora_entrada,
         a.hora_salida,
-        a.horas_extra
+        a.horas_trabajadas,
+        a.horas_extra,
+        a.observaciones AS justificacion,
+        a.metodo_entrada,
+        a.metodo_salida
       FROM trabajadores_asignados at   
       JOIN trabajadores t ON t.id = at.trabajador_id
 
@@ -36,78 +40,116 @@ export const getAsistenciaDia = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-export const guardarAsistenciaDia = async (req, res) => {
+// La asistencia (entrada/salida) solo llega de las marcas de la app móvil.
+// Desde la web únicamente se agregan justificaciones y se cierra el día.
+const diaEstaCerrado = async (client, obraId, fecha) => {
+  const { rows } = await client.query(
+    "SELECT 1 FROM asistencia_cierre_dia WHERE obra_id = $1 AND fecha = $2",
+    [obraId, fecha],
+  );
+  return rows.length > 0;
+};
+
+export const guardarJustificaciones = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { obra_id, fecha, registros } = req.body;
+    const { obra_id, fecha, justificaciones } = req.body;
+
+    if (!obra_id || !fecha || !Array.isArray(justificaciones)) {
+      return res.status(400).json({ message: "Datos incompletos" });
+    }
+
+    if (await diaEstaCerrado(client, obra_id, fecha)) {
+      return res.status(400).json({ message: "El día ya está cerrado" });
+    }
 
     await client.query("BEGIN");
 
-    for (const r of registros) {
-      let horasTrabajadas = 0;
+    for (const j of justificaciones) {
+      const texto =
+        typeof j.justificacion === "string" ? j.justificacion.trim() : "";
 
-      // calcular horas si hay entrada y salida
-      if (r.hora_entrada && r.hora_salida) {
-        const diff = await client.query(
-          `
-          SELECT EXTRACT(EPOCH FROM ($2::time - $1::time))/3600 as horas
-        `,
-          [r.hora_entrada, r.hora_salida],
-        );
-
-        horasTrabajadas = Number(diff.rows[0].horas).toFixed(2);
+      if (texto.length > 500) {
+        throw new Error("La justificación no puede exceder 500 caracteres");
       }
 
+      // Si el trabajador no tiene marcas, la fila se crea como falta;
+      // una marca de entrada posterior la cambia a asistió.
       await client.query(
         `
         INSERT INTO asistencias(
-          obra_id,
-          trabajador_id,
-          fecha,
-          estado,
-          hora_entrada,
-          hora_salida,
-          horas_trabajadas,
-          horas_extra,
-          observaciones
+          obra_id, trabajador_id, fecha, estado,
+          horas_trabajadas, horas_extra, observaciones
         )
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        VALUES($1, $2, $3, 'falta', 0, 0, $4)
         ON CONFLICT (trabajador_id, fecha)
-        DO UPDATE SET
-          estado = EXCLUDED.estado,
-          hora_entrada = EXCLUDED.hora_entrada,
-          hora_salida = EXCLUDED.hora_salida,
-          horas_trabajadas = EXCLUDED.horas_trabajadas,
-          horas_extra = EXCLUDED.horas_extra,
-          observaciones = EXCLUDED.observaciones
+        DO UPDATE SET observaciones = EXCLUDED.observaciones
       `,
-        [
-          obra_id,
-          r.trabajador_id,
-          fecha,
-          r.estado,
-          r.hora_entrada || null,
-          r.hora_salida || null,
-          horasTrabajadas,
-          r.horas_extra || 0,
-          r.observaciones || null,
-        ],
+        [obra_id, j.trabajador_id, fecha, texto || null],
       );
     }
+
+    await client.query("COMMIT");
+    res.json({ message: "Justificaciones guardadas correctamente" });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    res.status(500).json({ message: err.message });
+  } finally {
+    client.release();
+  }
+};
+
+export const cerrarDia = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { obra_id, fecha } = req.body;
+
+    if (!obra_id || !fecha) {
+      return res.status(400).json({ message: "Datos incompletos" });
+    }
+
+    await client.query("BEGIN");
+
+    // Quien no tiene ninguna marca en el día queda como falta
+    await client.query(
+      `
+      INSERT INTO asistencias(
+        obra_id, trabajador_id, fecha, estado, horas_trabajadas, horas_extra
+      )
+      SELECT at.obra_id, at.trabajador_id, $2, 'falta', 0, 0
+      FROM trabajadores_asignados at
+      WHERE at.obra_id = $1
+        AND at.activo = true
+        AND at.trabajador_id IS NOT NULL
+      ON CONFLICT (trabajador_id, fecha) DO NOTHING
+    `,
+      [obra_id, fecha],
+    );
+
+    await client.query(
+      `
+      UPDATE asistencias
+      SET estado = 'falta'
+      WHERE obra_id = $1 AND fecha = $2
+        AND hora_entrada IS NULL AND hora_salida IS NULL
+    `,
+      [obra_id, fecha],
+    );
 
     // 🔒 CERRAR EL DIA
     await client.query(
       `
-  INSERT INTO asistencia_cierre_dia (obra_id, fecha)
-  VALUES ($1, $2)
-  ON CONFLICT (obra_id, fecha) DO NOTHING
-`,
+      INSERT INTO asistencia_cierre_dia (obra_id, fecha)
+      VALUES ($1, $2)
+      ON CONFLICT (obra_id, fecha) DO NOTHING
+    `,
       [obra_id, fecha],
     );
 
     await client.query("COMMIT");
-    res.json({ message: "Asistencia guardada correctamente" });
+    res.json({ message: "Día cerrado correctamente" });
   } catch (err) {
     await client.query("ROLLBACK");
     res.status(500).json({ message: err.message });

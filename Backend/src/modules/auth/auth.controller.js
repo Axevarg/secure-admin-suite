@@ -6,6 +6,11 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from ".
 import crypto from "crypto";
 import { sendResetEmail } from "./auth.mail.js";
 
+const REFRESH_DIAS = 7; // igual que la expiración de generateRefreshToken
+
+const hashToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
 
 
 export const login = async (req, res) => {
@@ -48,6 +53,13 @@ const result = await pool.query(`
     });
 
     const refreshToken = generateRefreshToken({ id: user.id });
+
+    // 💾 guardar la sesión (una por dispositivo) para poder renovar y revocar
+    await pool.query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expira_en)
+       VALUES ($1, $2, NOW() + ($3 || ' days')::interval)`,
+      [user.id, hashToken(refreshToken), String(REFRESH_DIAS)]
+    );
 
     res.json({
       user: {
@@ -133,8 +145,18 @@ export const refreshSession = async (req, res) => {
     if (!user)
       return res.status(401).json({ message: "No autorizado" });
 
-    // 3️⃣ validar que coincida con el guardado en DB
-    if (user.refresh_token !== refreshToken)
+    if (!user.is_active)
+      return res.status(401).json({ message: "No autorizado" });
+
+    // 3️⃣ validar que la sesión exista y no esté revocada ni vencida
+    const sesion = await pool.query(
+      `SELECT 1 FROM refresh_tokens
+       WHERE token_hash = $1 AND user_id = $2
+         AND revocado_en IS NULL AND expira_en > NOW()`,
+      [hashToken(refreshToken), user.id]
+    );
+
+    if (sesion.rows.length === 0)
       return res.status(401).json({ message: "Token inválido" });
 
     // 4️⃣ generar nuevo access token
@@ -149,12 +171,16 @@ export const refreshSession = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    const { userId } = req.body;
+    const { refreshToken } = req.body;
 
-    await pool.query(
-      `UPDATE users SET refresh_token = NULL WHERE id = $1`,
-      [userId]
-    );
+    // Revoca solo la sesión de este dispositivo
+    if (refreshToken) {
+      await pool.query(
+        `UPDATE refresh_tokens SET revocado_en = NOW()
+         WHERE token_hash = $1 AND revocado_en IS NULL`,
+        [hashToken(refreshToken)]
+      );
+    }
 
     res.json({ message: "Sesión cerrada correctamente" });
   } catch (err) {

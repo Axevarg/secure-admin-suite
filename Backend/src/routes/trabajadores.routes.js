@@ -5,8 +5,11 @@ import {
   updateTrabajador,
   deleteTrabajador, getTrabajadoresDisponibles
 } from "../controllers/trabajadores.controller.js";
+import { authMiddleware } from "../modules/auth/auth.middleware.js";
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.get("/disponibles", getTrabajadoresDisponibles);
 router.get("/", getTrabajadores);
