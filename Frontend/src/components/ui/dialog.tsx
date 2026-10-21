@@ -37,42 +37,19 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        `
-        fixed left-[50%] top-[4vh] z-50
-        w-[calc(100%-2rem)]
-        max-w-lg
-        max-h-[92vh]
-        translate-x-[-50%]
-        translate-y-0
-
-        overflow-y-auto
-        overscroll-contain
-
-        gap-4
-        border
-        bg-background
-        p-6
-        shadow-lg
-
-        duration-200
-
-        data-[state=open]:animate-in
-        data-[state=closed]:animate-out
-        data-[state=closed]:fade-out-0
-        data-[state=open]:fade-in-0
-        data-[state=closed]:zoom-out-95
-        data-[state=open]:zoom-in-95
-
-        sm:top-[50%]
-        sm:max-h-[90vh]
-        sm:translate-y-[-50%]
-        sm:rounded-lg
-
-        scrollbar-thin
-        scrollbar-thumb-slate-300
-        scrollbar-track-transparent
-        `,
+        // Columna flex con altura máxima del viewport: header/footer quedan
+        // fijos y el bloque con overflow-y-auto se encoge y hace scroll.
+        "fixed left-[50%] top-[4dvh] z-50 flex w-[calc(100%-2rem)] max-w-lg max-h-[92dvh] translate-x-[-50%] translate-y-0 flex-col border bg-background p-6 shadow-lg duration-200",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        "sm:top-[50%] sm:max-h-[90dvh] sm:translate-y-[-50%] sm:rounded-lg",
         className,
+        // Va después de className a propósito: muchas páginas pasan
+        // "overflow-hidden" (para las esquinas redondeadas) y eso impedía
+        // hacer scroll hasta los botones del final.
+        "overflow-y-auto overflow-x-hidden overscroll-contain",
+        // Solo los hijos directos que ya scrollean pueden encogerse; el resto
+        // (encabezado, pie con botones) conserva su altura.
+        "[&>*]:shrink-0 [&>[class*='overflow-y-auto']]:min-h-0 [&>[class*='overflow-y-auto']]:shrink",
       )}
       {...props}
     >
