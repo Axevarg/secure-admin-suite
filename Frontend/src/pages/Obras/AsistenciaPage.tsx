@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Clock3,
   Users,
+  MapPin,
   Lock,
   ScanFace,
   Hand,
@@ -43,6 +44,12 @@ interface TrabajadorRow {
   justificacion?: string | null;
   metodo_entrada?: "facial" | "manual" | null;
   metodo_salida?: "facial" | "manual" | null;
+  lat_entrada?: number | null;
+  lng_entrada?: number | null;
+  precision_entrada?: number | null;
+  lat_salida?: number | null;
+  lng_salida?: number | null;
+  precision_salida?: number | null;
 }
 
 type EstadoDia = "asistio" | "tarde" | "falta" | "pendiente";
@@ -58,6 +65,25 @@ const estadoDe = (t: TrabajadorRow, diaCerrado: boolean): EstadoDia => {
 
 const formatoHora = (hora?: string | null) => (hora ? hora.slice(0, 5) : "--:--");
 
+interface MarcaRow {
+  id: number;
+  trabajador_id: number;
+  nombre: string;
+  tipo: "entrada" | "salida";
+  metodo: "facial" | "manual";
+  hora: string;
+  lat: number | null;
+  lng: number | null;
+  precision_m: number | null;
+  estado: "aplicada" | "dia_cerrado" | "no_asignado";
+}
+
+const ESTADO_MARCA: Record<MarcaRow["estado"], string> = {
+  aplicada: "Aplicada",
+  dia_cerrado: "Día cerrado",
+  no_asignado: "No asignado",
+};
+
 const today = new Date().toISOString().slice(0, 10);
 
 export default function AsistenciaPage() {
@@ -69,6 +95,7 @@ export default function AsistenciaPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [marcas, setMarcas] = useState<MarcaRow[]>([]);
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
   const [openReportes, setOpenReportes] = useState(false);
@@ -123,10 +150,22 @@ export default function AsistenciaPage() {
     }
   };
 
+  // Marcas de la app móvil del día, con su ubicación GPS
+  const loadMarcas = async () => {
+    try {
+      const res = await api.get(`/asistencias/obra/${id}/marcas?fecha=${fecha}`);
+      setMarcas(res.data);
+    } catch (err) {
+      console.error("Error al cargar marcas:", err);
+      setMarcas([]);
+    }
+  };
+
   useEffect(() => {
     if (!id) return;
     loadData();
     verificarCierre();
+    loadMarcas();
   }, [fecha, id]);
 
   // Lógica de filtrado en tiempo real
@@ -644,6 +683,73 @@ export default function AsistenciaPage() {
             </p>
           </div>
         )}
+
+        {/* MARCAS DE LA APP CON UBICACIÓN */}
+        <div className="mt-8 bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-8 py-5 border-b border-slate-100 flex items-center gap-3">
+            <MapPin size={18} className="text-red-600" />
+            <h2 className="font-black uppercase text-sm tracking-tight text-slate-900">
+              Marcas de la app ({marcas.length})
+            </h2>
+          </div>
+          {marcas.length === 0 ? (
+            <p className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Sin marcas de la app en esta fecha
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100">
+                    {["Hora", "Trabajador", "Tipo", "Método", "Estado", "Ubicación"].map((h) => (
+                      <th
+                        key={h}
+                        className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {marcas.map((m) => (
+                    <tr key={m.id} className="text-[11px] font-bold text-slate-700">
+                      <td className="px-6 py-3">{formatoHora(m.hora)}</td>
+                      <td className="px-6 py-3 uppercase">{m.nombre}</td>
+                      <td className="px-6 py-3 capitalize">{m.tipo}</td>
+                      <td className="px-6 py-3">
+                        <span className="flex items-center gap-1">
+                          <MetodoIcono metodo={m.metodo} />
+                          {m.metodo === "facial" ? "Rostro" : "Manual"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3">{ESTADO_MARCA[m.estado] ?? m.estado}</td>
+                      <td className="px-6 py-3">
+                        {m.lat != null && m.lng != null ? (
+                          <a
+                            href={`https://www.google.com/maps?q=${m.lat},${m.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-red-600 hover:underline"
+                          >
+                            <MapPin size={12} /> Ver en mapa
+                            {m.precision_m != null && (
+                              <span className="text-slate-400">
+                                (±{Math.round(m.precision_m)} m)
+                              </span>
+                            )}
+                          </a>
+                        ) : (
+                          <span className="text-slate-300">Sin ubicación</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -713,15 +819,47 @@ const MetodoIcono = ({ metodo }: { metodo?: string | null }) =>
     <Hand size={12} className="text-slate-400" aria-label="Manual" />
   ) : null;
 
+// Enlace a Google Maps con la ubicación GPS de la marca
+const UbicacionLink = ({ lat, lng, precision }: any) =>
+  lat != null && lng != null ? (
+    <a
+      href={`https://www.google.com/maps?q=${lat},${lng}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={
+        precision != null
+          ? `Ver en mapa (±${Math.round(precision)} m)`
+          : "Ver en mapa"
+      }
+      className="text-red-600 hover:text-red-800"
+    >
+      <MapPin size={12} />
+    </a>
+  ) : null;
+
 const Marcas = ({ t }: { t: TrabajadorRow }) => (
   <div className="flex gap-3">
     <DatoLectura label="Entrada">
       {formatoHora(t.hora_entrada)}
       {t.hora_entrada && <MetodoIcono metodo={t.metodo_entrada} />}
+      {t.hora_entrada && (
+        <UbicacionLink
+          lat={t.lat_entrada}
+          lng={t.lng_entrada}
+          precision={t.precision_entrada}
+        />
+      )}
     </DatoLectura>
     <DatoLectura label="Salida">
       {formatoHora(t.hora_salida)}
       {t.hora_salida && <MetodoIcono metodo={t.metodo_salida} />}
+      {t.hora_salida && (
+        <UbicacionLink
+          lat={t.lat_salida}
+          lng={t.lng_salida}
+          precision={t.precision_salida}
+        />
+      )}
     </DatoLectura>
     <DatoLectura label="Horas">
       {Number(t.horas_trabajadas || 0).toLocaleString("es-MX", {

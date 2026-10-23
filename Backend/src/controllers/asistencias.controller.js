@@ -18,7 +18,13 @@ export const getAsistenciaDia = async (req, res) => {
         a.horas_extra,
         a.observaciones AS justificacion,
         a.metodo_entrada,
-        a.metodo_salida
+        a.metodo_salida,
+        me.lat AS lat_entrada,
+        me.lng AS lng_entrada,
+        me.precision_m AS precision_entrada,
+        ms.lat AS lat_salida,
+        ms.lng AS lng_salida,
+        ms.precision_m AS precision_salida
       FROM trabajadores_asignados at   
       JOIN trabajadores t ON t.id = at.trabajador_id
 
@@ -26,6 +32,26 @@ export const getAsistenciaDia = async (req, res) => {
         ON a.trabajador_id = t.id
         AND a.obra_id = at.obra_id       
         AND a.fecha = $2
+
+      -- 📍 Ubicación de la marca de la app que dio la entrada (primera del día)
+      LEFT JOIN LATERAL (
+        SELECT m.lat, m.lng, m.precision_m
+        FROM asistencia_marcas m
+        WHERE m.trabajador_id = t.id AND m.obra_id = at.obra_id
+          AND m.fecha = $2 AND m.tipo = 'entrada' AND m.estado = 'aplicada'
+        ORDER BY m.marcado_en ASC
+        LIMIT 1
+      ) me ON true
+
+      -- 📍 Ubicación de la marca de la app que dio la salida (última del día)
+      LEFT JOIN LATERAL (
+        SELECT m.lat, m.lng, m.precision_m
+        FROM asistencia_marcas m
+        WHERE m.trabajador_id = t.id AND m.obra_id = at.obra_id
+          AND m.fecha = $2 AND m.tipo = 'salida' AND m.estado = 'aplicada'
+        ORDER BY m.marcado_en DESC
+        LIMIT 1
+      ) ms ON true
 
       WHERE at.obra_id = $1
       AND at.activo = true

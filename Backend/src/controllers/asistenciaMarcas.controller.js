@@ -13,7 +13,7 @@ const validarMarca = (m) => {
   if (!m || typeof m !== "object") return "Marca vacía";
   if (typeof m.uuid !== "string" || !UUID_REGEX.test(m.uuid)) return "uuid inválido";
   if (!Number.isInteger(m.obra_id)) return "obra_id inválido";
-  if (!Number.isInteger(m.trabajador_id)) return "trabajador_id inválido";
+  if (!Number.isInteger(m.trabajador_id)) return "trabajador_id i<nválido";
   if (!["entrada", "salida"].includes(m.tipo)) return "tipo inválido";
   if (!["facial", "manual"].includes(m.metodo)) return "metodo inválido";
 
@@ -227,7 +227,8 @@ export const getMarcasObra = async (req, res) => {
       `
       SELECT
         m.id, m.trabajador_id, t.nombre, m.tipo, m.metodo, m.distancia,
-        m.marcado_en, m.fecha, m.hora, m.lat, m.lng, m.estado, m.recibido_en
+        m.marcado_en, m.fecha, m.hora, m.lat, m.lng, m.precision_m,
+        m.dispositivo, m.estado, m.recibido_en
       FROM asistencia_marcas m
       JOIN trabajadores t ON t.id = m.trabajador_id
       WHERE m.obra_id = $1 AND m.fecha = $2
