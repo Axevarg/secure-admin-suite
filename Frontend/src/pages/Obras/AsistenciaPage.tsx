@@ -50,6 +50,8 @@ interface TrabajadorRow {
   lat_salida?: number | null;
   lng_salida?: number | null;
   precision_salida?: number | null;
+  direccion_entrada?: string | null;
+  direccion_salida?: string | null;
 }
 
 type EstadoDia = "asistio" | "tarde" | "falta" | "pendiente";
@@ -75,6 +77,7 @@ interface MarcaRow {
   lat: number | null;
   lng: number | null;
   precision_m: number | null;
+  direccion: string | null;
   estado: "aplicada" | "dia_cerrado" | "no_asignado";
 }
 
@@ -726,6 +729,7 @@ export default function AsistenciaPage() {
                       <td className="px-6 py-3">{ESTADO_MARCA[m.estado] ?? m.estado}</td>
                       <td className="px-6 py-3">
                         {m.lat != null && m.lng != null ? (
+                          <>
                           <a
                             href={`https://www.google.com/maps?q=${m.lat},${m.lng}`}
                             target="_blank"
@@ -739,6 +743,12 @@ export default function AsistenciaPage() {
                               </span>
                             )}
                           </a>
+                          {m.direccion && (
+                            <span className="block text-[10px] font-semibold text-slate-400 mt-1">
+                              {m.direccion}
+                            </span>
+                          )}
+                          </>
                         ) : (
                           <span className="text-slate-300">Sin ubicación</span>
                         )}
@@ -849,6 +859,7 @@ const Marcas = ({ t }: { t: TrabajadorRow }) => (
           precision={t.precision_entrada}
         />
       )}
+      {t.hora_entrada && <Direccion texto={t.direccion_entrada} />}
     </DatoLectura>
     <DatoLectura label="Salida">
       {formatoHora(t.hora_salida)}
@@ -860,6 +871,7 @@ const Marcas = ({ t }: { t: TrabajadorRow }) => (
           precision={t.precision_salida}
         />
       )}
+      {t.hora_salida && <Direccion texto={t.direccion_salida} />}
     </DatoLectura>
     <DatoLectura label="Horas">
       {Number(t.horas_trabajadas || 0).toLocaleString("es-MX", {
@@ -874,11 +886,19 @@ const DatoLectura = ({ label, children }: any) => (
     <span className="text-[7px] font-black uppercase text-slate-400 block mb-1 tracking-tighter">
       {label}
     </span>
-    <span className="flex items-center gap-1 font-black text-[11px] text-slate-700">
+    <span className="flex flex-wrap items-center gap-1 font-black text-[11px] text-slate-700">
       {children}
     </span>
   </div>
 );
+
+// Dirección en texto calculada por el backend a partir del GPS de la marca
+const Direccion = ({ texto }: { texto?: string | null }) =>
+  texto ? (
+    <span className="basis-full text-[9px] font-semibold text-slate-400 leading-tight">
+      {texto}
+    </span>
+  ) : null;
 
 const JustificacionInput = ({ value, disabled, onChange }: any) => (
   <textarea

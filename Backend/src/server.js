@@ -24,6 +24,7 @@ import colaboradoresRouter from "./routes/colaboradores.routes.js";
 import nominaRouter from "./routes/nomina.routes.js";
 import indirectosRoutes from "./routes/indirectos.routes.js";
 import biometriaRoutes from "./routes/biometria.routes.js";
+import { iniciarGeocodificacion } from "./utils/geocodificacion.js";
 import cors from "cors";
 
 app.use(cors({
@@ -65,4 +66,6 @@ const PORT = 3000;
 
 app.listen(PORT, () => {
   console.log("API running on port " + PORT);
+  // 📍 Dirección en texto de las marcas de la app (en segundo plano)
+  iniciarGeocodificacion();
 });
