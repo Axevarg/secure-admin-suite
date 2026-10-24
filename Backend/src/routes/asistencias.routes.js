@@ -2,7 +2,6 @@ import { Router } from "express";
 import {
   getAsistenciaDia,
   guardarJustificaciones,
-  cerrarDia,
   historialObra,
   verificarDiaCerrado // 👈 NUEVO
 } from "../controllers/asistencias.controller.js";
@@ -16,9 +15,8 @@ const router = Router();
 // Obtener asistencia del día
 router.get("/obra/:obraId", authMiddleware, getAsistenciaDia);
 
-// La asistencia viene de la app móvil: la web solo justifica y cierra el día
+// La asistencia viene de la app móvil: la web solo justifica (el día se cierra solo al pasar)
 router.post("/justificaciones", authMiddleware, guardarJustificaciones);
-router.post("/cerrar-dia", authMiddleware, cerrarDia);
 
 // Historial de obra
 router.get("/obra/:obraId/historial", authMiddleware, historialObra);

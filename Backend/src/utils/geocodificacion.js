@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { marcasTieneDireccion } from "./columnas.js";
 
 // Geocodificación inversa con Nominatim (OpenStreetMap): convierte lat/lng
 // de las marcas en una dirección en texto y la guarda en asistencia_marcas.
@@ -10,6 +11,7 @@ const LOTE = 50;
 const INTERVALO_MS = 10 * 60 * 1000;
 
 let enProceso = false;
+let avisoSinColumna = false;
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,6 +48,15 @@ export const procesarDireccionesPendientes = async () => {
   enProceso = true;
 
   try {
+    // Sin la migración de direccion no hay dónde guardar: se omite en silencio
+    if (!(await marcasTieneDireccion())) {
+      if (!avisoSinColumna) {
+        console.log("Geocodificación omitida: falta la columna asistencia_marcas.direccion");
+        avisoSinColumna = true;
+      }
+      return;
+    }
+
     const { rows } = await pool.query(
       `
       SELECT id, lat, lng

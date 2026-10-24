@@ -1,9 +1,15 @@
 import { pool } from "../config/db.js";
+import { marcasTieneDireccion } from "../utils/columnas.js";
+
+const TZ = process.env.ASISTENCIA_TZ || "America/Mexico_City";
 
 export const getAsistenciaDia = async (req, res) => {
   try {
     const { obraId } = req.params;
     const fecha = req.query.fecha;
+    const colDireccion = (await marcasTieneDireccion())
+      ? "m.direccion"
+      : "NULL::text AS direccion";
 
     const result = await pool.query(
       `
@@ -37,7 +43,7 @@ export const getAsistenciaDia = async (req, res) => {
 
       -- 📍 Ubicación de la marca de la app que dio la entrada (primera del día)
       LEFT JOIN LATERAL (
-        SELECT m.lat, m.lng, m.precision_m, m.direccion
+        SELECT m.lat, m.lng, m.precision_m, ${colDireccion}
         FROM asistencia_marcas m
         WHERE m.trabajador_id = t.id AND m.obra_id = at.obra_id
           AND m.fecha = $2 AND m.tipo = 'entrada' AND m.estado = 'aplicada'
@@ -47,7 +53,7 @@ export const getAsistenciaDia = async (req, res) => {
 
       -- 📍 Ubicación de la marca de la app que dio la salida (última del día)
       LEFT JOIN LATERAL (
-        SELECT m.lat, m.lng, m.precision_m, m.direccion
+        SELECT m.lat, m.lng, m.precision_m, ${colDireccion}
         FROM asistencia_marcas m
         WHERE m.trabajador_id = t.id AND m.obra_id = at.obra_id
           AND m.fecha = $2 AND m.tipo = 'salida' AND m.estado = 'aplicada'
@@ -69,13 +75,21 @@ export const getAsistenciaDia = async (req, res) => {
   }
 };
 // La asistencia (entrada/salida) solo llega de las marcas de la app móvil.
-// Desde la web únicamente se agregan justificaciones y se cierra el día.
+// Desde la web únicamente se agregan justificaciones.
+// Un día queda cerrado en automático cuando ya pasó (medianoche en la zona
+// de la obra) o si tiene un cierre registrado en asistencia_cierre_dia.
 const diaEstaCerrado = async (client, obraId, fecha) => {
   const { rows } = await client.query(
-    "SELECT 1 FROM asistencia_cierre_dia WHERE obra_id = $1 AND fecha = $2",
-    [obraId, fecha],
+    `
+    SELECT
+      ($2::date < (NOW() AT TIME ZONE $3)::date)
+      OR EXISTS (
+        SELECT 1 FROM asistencia_cierre_dia WHERE obra_id = $1 AND fecha = $2::date
+      ) AS cerrado
+  `,
+    [obraId, fecha, TZ],
   );
-  return rows.length > 0;
+  return rows[0]?.cerrado === true;
 };
 
 export const guardarJustificaciones = async (req, res) => {
@@ -128,64 +142,6 @@ export const guardarJustificaciones = async (req, res) => {
   }
 };
 
-export const cerrarDia = async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    const { obra_id, fecha } = req.body;
-
-    if (!obra_id || !fecha) {
-      return res.status(400).json({ message: "Datos incompletos" });
-    }
-
-    await client.query("BEGIN");
-
-    // Quien no tiene ninguna marca en el día queda como falta
-    await client.query(
-      `
-      INSERT INTO asistencias(
-        obra_id, trabajador_id, fecha, estado, horas_trabajadas, horas_extra
-      )
-      SELECT at.obra_id, at.trabajador_id, $2, 'falta', 0, 0
-      FROM trabajadores_asignados at
-      WHERE at.obra_id = $1
-        AND at.activo = true
-        AND at.trabajador_id IS NOT NULL
-      ON CONFLICT (trabajador_id, fecha) DO NOTHING
-    `,
-      [obra_id, fecha],
-    );
-
-    await client.query(
-      `
-      UPDATE asistencias
-      SET estado = 'falta'
-      WHERE obra_id = $1 AND fecha = $2
-        AND hora_entrada IS NULL AND hora_salida IS NULL
-    `,
-      [obra_id, fecha],
-    );
-
-    // 🔒 CERRAR EL DIA
-    await client.query(
-      `
-      INSERT INTO asistencia_cierre_dia (obra_id, fecha)
-      VALUES ($1, $2)
-      ON CONFLICT (obra_id, fecha) DO NOTHING
-    `,
-      [obra_id, fecha],
-    );
-
-    await client.query("COMMIT");
-    res.json({ message: "Día cerrado correctamente" });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    res.status(500).json({ message: err.message });
-  } finally {
-    client.release();
-  }
-};
-
 export const historialObra = async (req, res) => {
   try {
     const { obraId } = req.params;
@@ -218,16 +174,11 @@ export const verificarDiaCerrado = async (req, res) => {
     const { obraId } = req.params;
     const { fecha } = req.query;
 
-    const result = await pool.query(`
-      SELECT cerrado
-      FROM asistencia_cierre_dia
-      WHERE obra_id = $1 AND fecha = $2
-    `, [obraId, fecha]);
+    if (!fecha) {
+      return res.status(400).json({ message: "Fecha requerida" });
+    }
 
-    res.json({
-      cerrado: result.rows.length > 0
-    });
-
+    res.json({ cerrado: await diaEstaCerrado(pool, obraId, fecha) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

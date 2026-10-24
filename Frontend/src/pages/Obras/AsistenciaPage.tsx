@@ -97,7 +97,6 @@ export default function AsistenciaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [closing, setClosing] = useState(false);
   const [marcas, setMarcas] = useState<MarcaRow[]>([]);
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
@@ -231,27 +230,6 @@ export default function AsistenciaPage() {
     }
   };
 
-  const cerrar = async () => {
-    if (
-      !confirm(
-        "Al cerrar el día, quien no tenga marcas quedará con falta y ya no se podrán agregar justificaciones ni recibir marcas de la app para esta fecha. ¿Continuar?",
-      )
-    )
-      return;
-
-    try {
-      setClosing(true);
-      await api.post("/asistencias/cerrar-dia", { obra_id: id, fecha });
-      await loadData();
-      await verificarCierre();
-    } catch (err) {
-      console.error(err);
-      alert("Error al cerrar el día");
-    } finally {
-      setClosing(false);
-    }
-  };
-
   if (loading)
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -294,29 +272,20 @@ export default function AsistenciaPage() {
             onChange={(e) => setFecha(e.target.value)}
             className="bg-transparent border-none text-slate-900 font-black text-xs uppercase focus-visible:ring-0 w-full sm:w-40 h-10"
           />
+          {/* El día se cierra solo al pasar la medianoche */}
           {!diaCerrado ? (
-            <>
-              <Button
-                onClick={guardar}
-                disabled={saving || closing}
-                className="bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] h-10 px-6 rounded-xl transition-all shadow-lg shadow-red-900/20"
-              >
-                {saving ? (
-                  <Timer className="animate-spin mr-2" size={14} />
-                ) : (
-                  <Save size={14} className="mr-2" strokeWidth={3} />
-                )}
-                {saving ? "..." : "Guardar"}
-              </Button>
-              <Button
-                onClick={cerrar}
-                disabled={saving || closing}
-                className="bg-slate-900 hover:bg-slate-700 text-white font-black uppercase text-[10px] h-10 px-6 rounded-xl transition-all"
-              >
-                <Lock size={14} className="mr-2" strokeWidth={3} />
-                {closing ? "..." : "Cerrar día"}
-              </Button>
-            </>
+            <Button
+              onClick={guardar}
+              disabled={saving}
+              className="bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] h-10 px-6 rounded-xl transition-all shadow-lg shadow-red-900/20"
+            >
+              {saving ? (
+                <Timer className="animate-spin mr-2" size={14} />
+              ) : (
+                <Save size={14} className="mr-2" strokeWidth={3} />
+              )}
+              {saving ? "..." : "Guardar"}
+            </Button>
           ) : (
             <span className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 px-4">
               <Lock size={14} /> Día cerrado

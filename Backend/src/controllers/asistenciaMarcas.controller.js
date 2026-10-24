@@ -1,6 +1,7 @@
 import { pool } from "../config/db.js";
 import { tieneAccesoObra } from "./biometria.controller.js";
 import { procesarDireccionesPendientes } from "../utils/geocodificacion.js";
+import { marcasTieneDireccion } from "../utils/columnas.js";
 
 // Zona horaria de las obras: la hora del teléfono se convierte a fecha/hora local.
 const ZONA_HORARIA = process.env.ASISTENCIA_TZ || "America/Mexico_City";
@@ -226,13 +227,16 @@ export const getMarcasObra = async (req, res) => {
   try {
     const { obraId } = req.params;
     const { fecha } = req.query;
+    const colDireccion = (await marcasTieneDireccion())
+      ? "m.direccion"
+      : "NULL::text AS direccion";
 
     const { rows } = await pool.query(
       `
       SELECT
         m.id, m.trabajador_id, t.nombre, m.tipo, m.metodo, m.distancia,
         m.marcado_en, m.fecha, m.hora, m.lat, m.lng, m.precision_m,
-        m.direccion, m.dispositivo, m.estado, m.recibido_en
+        ${colDireccion}, m.dispositivo, m.estado, m.recibido_en
       FROM asistencia_marcas m
       JOIN trabajadores t ON t.id = m.trabajador_id
       WHERE m.obra_id = $1 AND m.fecha = $2
