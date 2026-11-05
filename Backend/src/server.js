@@ -33,6 +33,11 @@ app.use(cors({
   exposedHeaders: ["Content-Type"],
 }));
 
+app.use("/uploads", (req, res, next) => {
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+}, express.static("uploads"));
+
 app.use("/roles", rolesRoutes);
 app.use("/users", usersRoutes);
 app.use("/clientes", clientesRoutes);
@@ -57,10 +62,7 @@ app.use("/indirectos", indirectosRoutes);
 app.use("/biometria", biometriaRoutes);
 app.use("/mobile", mobileRoutes);
 app.use(express.json());
-app.use("/uploads", (req, res, next) => {
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  next();
-}, express.static("uploads"));
+
 app.use("/evidencias", evidenciasRoutes);
 
 
