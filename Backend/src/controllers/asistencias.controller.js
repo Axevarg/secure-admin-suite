@@ -1,5 +1,6 @@
 import { pool } from "../config/db.js";
 import { marcasTieneDireccion } from "../utils/columnas.js";
+import { obtenerUnidadesAccesibles } from "../utils/unidades.js";
 
 const TZ = process.env.ASISTENCIA_TZ || "America/Mexico_City";
 
@@ -7,6 +8,9 @@ export const getAsistenciaDia = async (req, res) => {
   try {
     const { obraId } = req.params;
     const fecha = req.query.fecha;
+    const unidades = await obtenerUnidadesAccesibles(req.user.id, obraId);
+    if (unidades === null) return res.status(403).json({ message: "No tienes acceso a esta obra" });
+    const unidadIds = unidades.map((u) => u.id);
     const colDireccion = (await marcasTieneDireccion())
       ? "m.direccion"
       : "NULL::text AS direccion";
@@ -15,6 +19,8 @@ export const getAsistenciaDia = async (req, res) => {
       `
       SELECT 
         t.id AS trabajador_id,
+        at.unidad_id,
+        u.nombre AS unidad_nombre,
         t.nombre,
         a.id AS asistencia_id,
         a.estado,
@@ -35,10 +41,12 @@ export const getAsistenciaDia = async (req, res) => {
         ms.direccion AS direccion_salida
       FROM trabajadores_asignados at   
       JOIN trabajadores t ON t.id = at.trabajador_id
+      JOIN obra_unidades u ON u.id = at.unidad_id AND u.obra_id = at.obra_id
 
       LEFT JOIN asistencias a 
         ON a.trabajador_id = t.id
         AND a.obra_id = at.obra_id       
+        AND a.unidad_id = at.unidad_id
         AND a.fecha = $2
 
       -- 📍 Ubicación de la marca de la app que dio la entrada (primera del día)
@@ -63,9 +71,10 @@ export const getAsistenciaDia = async (req, res) => {
 
       WHERE at.obra_id = $1
       AND at.activo = true
-      ORDER BY t.nombre ASC
+      AND at.unidad_id = ANY($3::bigint[])
+      ORDER BY u.nombre ASC, t.nombre ASC
     `,
-      [obraId, fecha],
+      [obraId, fecha, unidadIds],
     );
 
     res.json(result.rows);
@@ -102,6 +111,10 @@ export const guardarJustificaciones = async (req, res) => {
       return res.status(400).json({ message: "Datos incompletos" });
     }
 
+    const unidades = await obtenerUnidadesAccesibles(req.user.id, obra_id);
+    if (unidades === null) return res.status(403).json({ message: "No tienes acceso a esta obra" });
+    const unidadIds = unidades.map((u) => u.id);
+
     if (await diaEstaCerrado(client, obra_id, fecha)) {
       return res.status(400).json({ message: "El día ya está cerrado" });
     }
@@ -112,6 +125,18 @@ export const guardarJustificaciones = async (req, res) => {
       const texto =
         typeof j.justificacion === "string" ? j.justificacion.trim() : "";
 
+      const asignacion = await client.query(
+        `SELECT unidad_id FROM trabajadores_asignados
+         WHERE obra_id=$1 AND trabajador_id=$2 AND activo=true
+           AND unidad_id=ANY($3::bigint[]) LIMIT 1`,
+        [obra_id, j.trabajador_id, unidadIds],
+      );
+      if (!asignacion.rows.length) {
+        const error = new Error("El trabajador no pertenece a una unidad disponible para este usuario");
+        error.status = 403;
+        throw error;
+      }
+
       if (texto.length > 500) {
         throw new Error("La justificación no puede exceder 500 caracteres");
       }
@@ -121,14 +146,14 @@ export const guardarJustificaciones = async (req, res) => {
       await client.query(
         `
         INSERT INTO asistencias(
-          obra_id, trabajador_id, fecha, estado,
+          obra_id, unidad_id, trabajador_id, fecha, estado,
           horas_trabajadas, horas_extra, observaciones
         )
-        VALUES($1, $2, $3, 'falta', 0, 0, $4)
+        VALUES($1, $2, $3, $4, 'falta', 0, 0, $5)
         ON CONFLICT (trabajador_id, fecha)
-        DO UPDATE SET observaciones = EXCLUDED.observaciones
+        DO UPDATE SET observaciones = EXCLUDED.observaciones, unidad_id=EXCLUDED.unidad_id
       `,
-        [obra_id, j.trabajador_id, fecha, texto || null],
+        [obra_id, asignacion.rows[0].unidad_id, j.trabajador_id, fecha, texto || null],
       );
     }
 
@@ -136,7 +161,7 @@ export const guardarJustificaciones = async (req, res) => {
     res.json({ message: "Justificaciones guardadas correctamente" });
   } catch (err) {
     await client.query("ROLLBACK");
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   } finally {
     client.release();
   }
@@ -145,6 +170,8 @@ export const guardarJustificaciones = async (req, res) => {
 export const historialObra = async (req, res) => {
   try {
     const { obraId } = req.params;
+    const unidades = await obtenerUnidadesAccesibles(req.user.id, obraId);
+    if (unidades === null) return res.status(403).json({ message: "No tienes acceso a esta obra" });
 
     const result = await pool.query(
       `
@@ -157,9 +184,10 @@ export const historialObra = async (req, res) => {
       FROM asistencias a
       JOIN trabajadores t ON t.id = a.trabajador_id
       WHERE a.obra_id = $1
+        AND a.unidad_id = ANY($2::bigint[])
       ORDER BY a.fecha DESC
     `,
-      [obraId],
+      [obraId, unidades.map((u) => u.id)],
     );
 
     res.json(result.rows);
@@ -178,6 +206,8 @@ export const verificarDiaCerrado = async (req, res) => {
       return res.status(400).json({ message: "Fecha requerida" });
     }
 
+    const unidades = await obtenerUnidadesAccesibles(req.user.id, obraId);
+    if (unidades === null) return res.status(403).json({ message: "No tienes acceso a esta obra" });
     res.json({ cerrado: await diaEstaCerrado(pool, obraId, fecha) });
   } catch (err) {
     res.status(500).json({ message: err.message });

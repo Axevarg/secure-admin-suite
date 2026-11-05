@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { obtenerUnidadesAccesibles, tieneAccesoUnidad } from "../utils/unidades.js";
 
 // El reconocimiento facial se hace en el teléfono. Aquí solo se guardan
 // los vectores (embeddings) de rostro y se entregan a la app por obra.
@@ -7,20 +8,8 @@ const DIMENSIONES_MIN = 64;
 const DIMENSIONES_MAX = 1024;
 
 export const tieneAccesoObra = async (userId, obraId) => {
-  const userRes = await pool.query(
-    "SELECT all_obras FROM users WHERE id=$1",
-    [userId]
-  );
-
-  if (userRes.rows.length === 0) return false;
-  if (userRes.rows[0].all_obras) return true;
-
-  const access = await pool.query(
-    "SELECT 1 FROM user_obras WHERE user_id=$1 AND obra_id=$2",
-    [userId, obraId]
-  );
-
-  return access.rows.length > 0;
+  const unidades = await obtenerUnidadesAccesibles(userId, obraId);
+  return unidades !== null && unidades.length > 0;
 };
 
 // Valida el vector y lo normaliza (longitud 1) para comparar por coseno.
@@ -42,14 +31,21 @@ const normalizarEmbedding = (embedding) => {
 export const getRostrosObra = async (req, res) => {
   try {
     const { obraId } = req.params;
-
-    if (!(await tieneAccesoObra(req.user.id, obraId))) {
+    const unidades = await obtenerUnidadesAccesibles(req.user.id, obraId);
+    if (unidades === null) {
       return res.status(403).json({ message: "No tienes acceso a esta obra" });
+    }
+    const unidadesIds = unidades.map((u) => u.id);
+    const unidadIdSolicitada = req.params.unidadId ?? req.query.unidad_id;
+    if (unidadIdSolicitada && !unidadesIds.some((id) => String(id) === String(unidadIdSolicitada))) {
+      return res.status(403).json({ message: "No tienes acceso a esta unidad" });
     }
 
     const { rows } = await pool.query(
       `
       SELECT
+        ta.unidad_id,
+        u.nombre AS unidad_nombre,
         t.id AS trabajador_id,
         t.nombre,
         e.nombre AS especialidad,
@@ -58,17 +54,21 @@ export const getRostrosObra = async (req, res) => {
         r.creado_en AS rostro_registrado_en
       FROM trabajadores_asignados ta
       JOIN trabajadores t ON t.id = ta.trabajador_id
+      JOIN obra_unidades u ON u.id = ta.unidad_id AND u.obra_id = ta.obra_id
       LEFT JOIN especialidades e ON e.id = t.especialidad_id
       LEFT JOIN trabajador_rostros r ON r.trabajador_id = t.id
       WHERE ta.obra_id = $1
         AND ta.activo = true
+        AND ta.unidad_id = ANY($2::bigint[])
+        AND ($3::bigint IS NULL OR ta.unidad_id = $3)
       ORDER BY t.nombre ASC
     `,
-      [obraId]
+      [obraId, unidadesIds, unidadIdSolicitada ?? null]
     );
 
     res.json({
       obra_id: Number(obraId),
+      unidad_id: unidadIdSolicitada ? Number(unidadIdSolicitada) : null,
       generado_en: new Date().toISOString(),
       trabajadores: rows,
     });
@@ -102,11 +102,23 @@ export const guardarRostro = async (req, res) => {
     }
 
     const trabajador = await pool.query(
-      "SELECT id FROM trabajadores WHERE id=$1",
+      `SELECT ta.obra_id, ta.unidad_id
+       FROM trabajadores t
+       JOIN trabajadores_asignados ta ON ta.trabajador_id=t.id AND ta.activo=true
+       JOIN obra_unidades u ON u.id=ta.unidad_id AND u.obra_id=ta.obra_id AND u.activa=true
+       WHERE t.id=$1`,
       [id]
     );
     if (trabajador.rows.length === 0) {
       return res.status(404).json({ message: "Trabajador no encontrado" });
+    }
+    const autorizado = await Promise.all(
+      trabajador.rows.map((asignacion) =>
+        tieneAccesoUnidad(req.user.id, asignacion.obra_id, asignacion.unidad_id)
+      )
+    );
+    if (!autorizado.some(Boolean)) {
+      return res.status(403).json({ message: "No tienes acceso a la unidad de este trabajador" });
     }
 
     const { rows } = await pool.query(
@@ -145,6 +157,22 @@ export const guardarRostro = async (req, res) => {
 export const eliminarRostro = async (req, res) => {
   try {
     const { id } = req.params;
+
+    const asignaciones = await pool.query(
+      `SELECT ta.obra_id, ta.unidad_id
+       FROM trabajadores_asignados ta
+       JOIN obra_unidades u ON u.id=ta.unidad_id AND u.obra_id=ta.obra_id AND u.activa=true
+       WHERE ta.trabajador_id=$1 AND ta.activo=true`,
+      [id]
+    );
+    const autorizado = await Promise.all(
+      asignaciones.rows.map((asignacion) =>
+        tieneAccesoUnidad(req.user.id, asignacion.obra_id, asignacion.unidad_id)
+      )
+    );
+    if (!autorizado.some(Boolean)) {
+      return res.status(403).json({ message: "No tienes acceso a la unidad de este trabajador" });
+    }
 
     const { rowCount } = await pool.query(
       "DELETE FROM trabajador_rostros WHERE trabajador_id=$1",

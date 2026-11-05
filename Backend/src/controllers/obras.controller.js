@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { tieneAccesoObra } from "../utils/unidades.js";
 
 export const getObras = async (req, res) => {
     try {
@@ -34,6 +35,13 @@ export const getObras = async (req, res) => {
             query += `
                 JOIN user_obras uo ON uo.obra_id = o.id
                 WHERE o.is_active = true AND uo.user_id = $1
+                  AND (
+                    uo.all_unidades = true OR EXISTS (
+                      SELECT 1 FROM user_obra_unidades au
+                      JOIN obra_unidades u ON u.id=au.unidad_id AND u.obra_id=au.obra_id
+                      WHERE au.user_id=uo.user_id AND au.obra_id=uo.obra_id AND u.activa=true
+                    )
+                  )
             `;
             params.push(userId);
         }
@@ -53,20 +61,8 @@ export const getObraById = async (req, res) => {
         const { id } = req.params;
         const userId = req.user.id;
 
-        const userRes = await pool.query(
-            "SELECT all_obras FROM users WHERE id=$1",
-            [userId]
-        );
-        const allObras = userRes.rows[0]?.all_obras;
-
-        if (!allObras) {
-            const access = await pool.query(
-                "SELECT 1 FROM user_obras WHERE user_id=$1 AND obra_id=$2",
-                [userId, id]
-            );
-            if (access.rows.length === 0) {
-                return res.status(403).json({ message: "No tienes acceso a esta obra" });
-            }
+        if (!(await tieneAccesoObra(userId, id))) {
+            return res.status(403).json({ message: "No tienes acceso a esta obra" });
         }
 
         const result = await pool.query(`
@@ -175,8 +171,25 @@ export const getProjectStatus = async (req, res) => {
 
 export const getObrasList = async (req, res) => {
   try {
+    const user = await pool.query("SELECT all_obras FROM users WHERE id=$1", [req.user.id]);
+    if (!user.rows.length) return res.status(404).json({ message: "Usuario no encontrado" });
+    const params = [];
+    let filtro = "";
+    if (!user.rows[0].all_obras) {
+      params.push(req.user.id);
+      filtro = `AND EXISTS (
+        SELECT 1 FROM user_obras uo
+        WHERE uo.user_id=$1 AND uo.obra_id=obras.id
+          AND (uo.all_unidades=true OR EXISTS (
+            SELECT 1 FROM user_obra_unidades au
+            JOIN obra_unidades u ON u.id=au.unidad_id AND u.obra_id=au.obra_id AND u.activa=true
+            WHERE au.user_id=uo.user_id AND au.obra_id=uo.obra_id
+          ))
+      )`;
+    }
     const result = await pool.query(
-      "SELECT id, nombre, ubicacion FROM obras WHERE is_active = true ORDER BY nombre"
+      `SELECT id, nombre, ubicacion FROM obras WHERE is_active = true ${filtro} ORDER BY nombre`,
+      params
     );
     res.json(result.rows);
   } catch (err) {

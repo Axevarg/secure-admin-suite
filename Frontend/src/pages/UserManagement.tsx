@@ -96,8 +96,10 @@ export default function UserManagement() {
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [obras, setObras] = useState<any[]>([]);
+  const [unidades, setUnidades] = useState<any[]>([]);
   const [allObras, setAllObras] = useState(false);
   const [selectedObraIds, setSelectedObraIds] = useState<number[]>([]);
+  const [unidadesPorObra, setUnidadesPorObra] = useState<Record<number, { all_unidades: boolean; unidad_ids: number[] }>>({});
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -133,10 +135,19 @@ const fetchObras = async () => {
     console.error("Error cargando obras:", err);
   }
 };
+  const fetchUnidades = async () => {
+    try {
+      const res = await api.get("/obras/unidades/all");
+      setUnidades(res.data);
+    } catch (err) {
+      console.error("Error cargando unidades:", err);
+    }
+  };
   useEffect(() => {
     fetchUsers();
     fetchRoles();
     fetchObras();
+    fetchUnidades();
   }, []);
 
   const openEditModal = async (user: any) => {
@@ -148,6 +159,12 @@ const fetchObras = async () => {
       const res = await api.get(`/users/${user.id}/obras`);
       setAllObras(res.data.all_obras);
       setSelectedObraIds(res.data.obras.map((o: any) => o.id));
+      setUnidadesPorObra(Object.fromEntries(
+        res.data.obras.map((o: any) => [o.id, {
+          all_unidades: o.all_unidades !== false,
+          unidad_ids: (o.unidades || []).map((unidad: any) => unidad.id),
+        }]),
+      ));
     } catch (err) {
       console.error("Error cargando obras del usuario:", err);
     }
@@ -172,9 +189,31 @@ const handleToggleStatus = async (id: number) => {
   fetchUsers();
 };
   const toggleObra = (id: number) =>
-    setSelectedObraIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedObraIds((prev) => {
+      const seleccionadas = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      setUnidadesPorObra((actuales) => {
+        const nuevo = { ...actuales };
+        if (!seleccionadas.includes(id)) delete nuevo[id];
+        else if (!nuevo[id]) nuevo[id] = { all_unidades: true, unidad_ids: [] };
+        return nuevo;
+      });
+      return seleccionadas;
+    });
+
+  const cambiarAlcanceUnidades = (obraId: number, todas: boolean) =>
+    setUnidadesPorObra((prev) => ({
+      ...prev,
+      [obraId]: { all_unidades: todas, unidad_ids: todas ? [] : prev[obraId]?.unidad_ids || [] },
+    }));
+
+  const toggleUnidad = (obraId: number, unidadId: number) =>
+    setUnidadesPorObra((prev) => {
+      const actual = prev[obraId] || { all_unidades: false, unidad_ids: [] };
+      const ids = actual.unidad_ids.includes(unidadId)
+        ? actual.unidad_ids.filter((id) => id !== unidadId)
+        : [...actual.unidad_ids, unidadId];
+      return { ...prev, [obraId]: { all_unidades: false, unidad_ids: ids } };
+    });
 
   const handleResetPassword = async (id: number) => {
     const res = await api.post(`/users/${id}/reset-password`);
@@ -203,6 +242,11 @@ const handleToggleStatus = async (id: number) => {
       await api.put(`/users/${userId}/obras`, {
         all_obras: allObras,
         obra_ids: allObras ? [] : selectedObraIds,
+        unidades_por_obra: allObras ? [] : selectedObraIds.map((obra_id) => ({
+          obra_id,
+          all_unidades: unidadesPorObra[obra_id]?.all_unidades !== false,
+          unidad_ids: unidadesPorObra[obra_id]?.unidad_ids || [],
+        })),
       });
 
       setShowModal(false);
@@ -210,6 +254,7 @@ const handleToggleStatus = async (id: number) => {
       setForm({ name: "", email: "", role: "" });
       setAllObras(false);
       setSelectedObraIds([]);
+      setUnidadesPorObra({});
       fetchUsers();
     } catch (err) {
       console.error("Error guardando usuario:", err);
@@ -251,6 +296,10 @@ const handleToggleStatus = async (id: number) => {
         <Button
           onClick={() => {
             setEditUser(null);
+            setForm({ name: "", email: "", role: "" });
+            setAllObras(false);
+            setSelectedObraIds([]);
+            setUnidadesPorObra({});
             setShowModal(true);
           }}
           className="relative z-10 bg-red-600 hover:bg-red-700 text-white font-black uppercase tracking-widest text-[10px] h-12 px-8 rounded-2xl shadow-xl shadow-red-900/20 transition-all active:scale-95 border-none outline-none"
@@ -478,7 +527,7 @@ const handleToggleStatus = async (id: number) => {
 
       {/* MODAL EXPEDIENTE SIGO */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-xl p-0 border-none overflow-hidden rounded-[2.5rem] shadow-2xl">
+        <DialogContent className="max-w-xl max-h-[90vh] p-0 border-none overflow-y-auto rounded-[2.5rem] shadow-2xl">
           <DialogHeader className="p-10 bg-slate-900 text-white relative">
             <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600" />
             <DialogTitle className="font-black text-3xl uppercase tracking-tighter flex items-center gap-4">
@@ -580,19 +629,47 @@ const handleToggleStatus = async (id: number) => {
               {!allObras && (
                 <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-100 rounded-2xl p-3">
                   {obras.map((obra) => (
-                    <label
-                      key={obra.id}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-red-50/40 cursor-pointer transition-colors"
-                    >
-                      <Checkbox
-                        checked={selectedObraIds.includes(obra.id)}
-                        onCheckedChange={() => toggleObra(obra.id)}
-                        className="border-slate-300 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
-                      />
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">
-                        {obra.nombre}
-                      </span>
-                    </label>
+                    <div key={obra.id} className="rounded-xl hover:bg-red-50/30 transition-colors">
+                      <label className="flex items-center gap-3 px-3 py-2 cursor-pointer">
+                        <Checkbox
+                          checked={selectedObraIds.includes(obra.id)}
+                          onCheckedChange={() => toggleObra(obra.id)}
+                          className="border-slate-300 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+                        />
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">
+                          {obra.nombre}
+                        </span>
+                      </label>
+                      {selectedObraIds.includes(obra.id) && (
+                        <div className="ml-9 mr-3 mb-3 rounded-xl border border-slate-100 bg-white p-3 space-y-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <Checkbox
+                              checked={unidadesPorObra[obra.id]?.all_unidades !== false}
+                              onCheckedChange={(checked) => cambiarAlcanceUnidades(obra.id, !!checked)}
+                              className="border-slate-300 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+                            />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">Todas las unidades</span>
+                          </label>
+                          {unidadesPorObra[obra.id]?.all_unidades === false && (
+                            <div className="max-h-28 overflow-y-auto space-y-1 border-t border-slate-100 pt-2">
+                              {unidades.filter((u) => Number(u.obra_id) === Number(obra.id)).map((unidad) => (
+                                <label key={unidad.id} className="flex items-center gap-2 pl-3 py-1 cursor-pointer">
+                                  <Checkbox
+                                    checked={unidadesPorObra[obra.id]?.unidad_ids.includes(Number(unidad.id)) || false}
+                                    onCheckedChange={() => toggleUnidad(obra.id, Number(unidad.id))}
+                                    className="border-slate-300 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+                                  />
+                                  <span className="text-[9px] font-bold text-slate-500">{unidad.nombre}</span>
+                                </label>
+                              ))}
+                              {!unidades.some((u) => Number(u.obra_id) === Number(obra.id)) && (
+                                <p className="text-[9px] text-slate-400 px-3">Esta obra aún no tiene unidades activas.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ))}
                   {obras.length === 0 && (
                     <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest p-3">

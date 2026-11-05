@@ -9,6 +9,8 @@ import {
 import { generarReporteAsistenciasPDF } from "../controllers/asistenciaReport.controller.js";
 import { sincronizarMarcas, getMarcasObra } from "../controllers/asistenciaMarcas.controller.js";
 import { authMiddleware } from "../modules/auth/auth.middleware.js";
+import { loadPermissions } from "../middleware/loadPermissions.js";
+import { requirePermission } from "../middleware/requierePermission.js";
 
 const router = Router();
 
@@ -25,11 +27,11 @@ router.get("/obra/:obraId/historial", authMiddleware, historialObra);
 router.get("/dia-cerrado/:obraId", authMiddleware, verificarDiaCerrado);
 
 // 📱 Marcas de la app móvil (reconocimiento facial en el teléfono)
-router.post("/marcas/sync", authMiddleware, sincronizarMarcas);
+router.post("/marcas/sync", authMiddleware, loadPermissions, requirePermission("app_movil", "view"), requirePermission("asistencia_movil", "create"), sincronizarMarcas);
 router.get("/obra/:obraId/marcas", authMiddleware, getMarcasObra);
 
 // Generar PDF
 // Sin token por ahora: la web lo abre con window.open, que no manda el header Authorization.
-router.get("/reporte/:obraId", generarReporteAsistenciasPDF);
+router.get("/reporte/:obraId", authMiddleware, generarReporteAsistenciasPDF);
 
 export default router;

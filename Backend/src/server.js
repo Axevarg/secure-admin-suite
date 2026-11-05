@@ -24,6 +24,7 @@ import colaboradoresRouter from "./routes/colaboradores.routes.js";
 import nominaRouter from "./routes/nomina.routes.js";
 import indirectosRoutes from "./routes/indirectos.routes.js";
 import biometriaRoutes from "./routes/biometria.routes.js";
+import mobileRoutes from "./routes/mobile.routes.js";
 import { iniciarGeocodificacion } from "./utils/geocodificacion.js";
 import cors from "cors";
 
@@ -54,6 +55,7 @@ app.use("/colaboradores", colaboradoresRouter);
 app.use("/nomina", nominaRouter);
 app.use("/indirectos", indirectosRoutes);
 app.use("/biometria", biometriaRoutes);
+app.use("/mobile", mobileRoutes);
 app.use(express.json());
 app.use("/uploads", (req, res, next) => {
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");

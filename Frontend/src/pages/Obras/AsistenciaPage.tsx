@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "@/lib/axios";
 import {
@@ -35,6 +35,8 @@ import {
 
 interface TrabajadorRow {
   trabajador_id: number;
+  unidad_id: number;
+  unidad_nombre: string;
   nombre: string;
   estado?: "asistio" | "tarde" | "falta";
   hora_entrada?: string | null;
@@ -69,6 +71,8 @@ const formatoHora = (hora?: string | null) => (hora ? hora.slice(0, 5) : "--:--"
 
 interface MarcaRow {
   id: number;
+  unidad_id: number;
+  unidad_nombre: string;
   trabajador_id: number;
   nombre: string;
   tipo: "entrada" | "salida";
@@ -89,6 +93,21 @@ const ESTADO_MARCA: Record<MarcaRow["estado"], string> = {
 
 const today = new Date().toISOString().slice(0, 10);
 
+function agruparPorUnidad<T extends { unidad_id: number | null; unidad_nombre?: string | null }>(items: T[]) {
+  const grupos = new Map<number | null, { unidad_id: number | null; unidad_nombre: string; items: T[] }>();
+  for (const item of items) {
+    const key = item.unidad_id ?? null;
+    const grupo = grupos.get(key) ?? {
+      unidad_id: key,
+      unidad_nombre: item.unidad_nombre || "Sin unidad",
+      items: [],
+    };
+    grupo.items.push(item);
+    grupos.set(key, grupo);
+  }
+  return [...grupos.values()].sort((a, b) => a.unidad_nombre.localeCompare(b.unidad_nombre, "es"));
+}
+
 export default function AsistenciaPage() {
   const { id } = useParams();
   const [obra, setObra] = useState<any>(null);
@@ -103,7 +122,7 @@ export default function AsistenciaPage() {
   const [openReportes, setOpenReportes] = useState(false);
   const [diaCerrado, setDiaCerrado] = useState(false);
 
-  const generarPDF = (tipo: string) => {
+  const generarPDF = async (tipo: string) => {
     let url = `/asistencias/reporte/${id}?tipo=${tipo}`;
 
     if (tipo === "dia") {
@@ -114,7 +133,17 @@ export default function AsistenciaPage() {
       url += `&fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
     }
 
-    window.open(import.meta.env.VITE_API_URL + url, "_blank");
+    try {
+      const respuesta = await api.get(url, { responseType: "blob" });
+      const archivo = URL.createObjectURL(respuesta.data);
+      const enlace = document.createElement("a");
+      enlace.href = archivo;
+      enlace.download = `reporte-asistencias-${id}.pdf`;
+      enlace.click();
+      window.setTimeout(() => URL.revokeObjectURL(archivo), 1000);
+    } catch (error) {
+      console.error("No se pudo descargar el reporte de asistencias", error);
+    }
   };
 
   useEffect(() => {
@@ -174,6 +203,8 @@ export default function AsistenciaPage() {
   const filteredRows = rows.filter((r) =>
     r.nombre.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+  const gruposAsistencia = agruparPorUnidad(filteredRows);
+  const gruposMarcas = agruparPorUnidad(marcas);
 
   // Actualización por ID para que el buscador no afecte los índices
   const updateField = (
@@ -567,9 +598,23 @@ export default function AsistenciaPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredRows.map((t) => (
+              {gruposAsistencia.map((grupo) => (
+                <Fragment key={`unidad-${grupo.unidad_id ?? "sin-unidad"}`}>
+                  <tr className="bg-slate-100/80 border-y border-slate-200">
+                    <td colSpan={4} className="px-8 py-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-[10px] uppercase tracking-widest text-slate-700">
+                          {grupo.unidad_nombre}
+                        </span>
+                        <span className="text-[9px] font-black uppercase text-slate-400">
+                          {grupo.items.length} trabajadores
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                  {grupo.items.map((t) => (
                 <tr
-                  key={t.trabajador_id}
+                  key={`${t.unidad_id}:${t.trabajador_id}`}
                   className="hover:bg-slate-50/30 transition-colors"
                 >
                   <td className="px-8 py-5">
@@ -600,6 +645,8 @@ export default function AsistenciaPage() {
                     />
                   </td>
                 </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -607,9 +654,15 @@ export default function AsistenciaPage() {
 
         {/* VISTA MÓVIL */}
         <div className="lg:hidden space-y-4">
-          {filteredRows.map((t) => (
+          {gruposAsistencia.map((grupo) => (
+            <section key={`unidad-movil-${grupo.unidad_id ?? "sin-unidad"}`} className="space-y-3">
+              <div className="flex items-center justify-between px-2 pt-2">
+                <h2 className="font-black text-[10px] uppercase tracking-widest text-slate-500">{grupo.unidad_nombre}</h2>
+                <span className="text-[9px] font-black uppercase text-slate-400">{grupo.items.length} trabajadores</span>
+              </div>
+              {grupo.items.map((t) => (
             <div
-              key={t.trabajador_id}
+              key={`${t.unidad_id}:${t.trabajador_id}`}
               className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 space-y-5 animate-in fade-in duration-300"
             >
               <div className="flex items-center gap-3">
@@ -637,6 +690,8 @@ export default function AsistenciaPage() {
                 }
               />
             </div>
+              ))}
+            </section>
           ))}
         </div>
 
@@ -684,7 +739,17 @@ export default function AsistenciaPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {marcas.map((m) => (
+                  {gruposMarcas.map((grupo) => (
+                    <Fragment key={`marcas-unidad-${grupo.unidad_id ?? "sin-unidad"}`}>
+                    <tr className="bg-slate-100/80 border-y border-slate-200">
+                      <td colSpan={6} className="px-6 py-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-[10px] uppercase tracking-widest text-slate-700">{grupo.unidad_nombre}</span>
+                          <span className="text-[9px] font-black uppercase text-slate-400">{grupo.items.length} marcas</span>
+                        </div>
+                      </td>
+                    </tr>
+                    {grupo.items.map((m) => (
                     <tr key={m.id} className="text-[11px] font-bold text-slate-700">
                       <td className="px-6 py-3">{formatoHora(m.hora)}</td>
                       <td className="px-6 py-3 uppercase">{m.nombre}</td>
@@ -723,6 +788,8 @@ export default function AsistenciaPage() {
                         )}
                       </td>
                     </tr>
+                    ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

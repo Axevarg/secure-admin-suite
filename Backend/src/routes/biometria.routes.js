@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../modules/auth/auth.middleware.js";
+import { loadPermissions } from "../middleware/loadPermissions.js";
+import { requirePermission } from "../middleware/requierePermission.js";
 import {
   getRostrosObra,
   guardarRostro,
@@ -8,10 +10,11 @@ import {
 
 const router = Router();
 
-router.use(authMiddleware);
+router.use(authMiddleware, loadPermissions, requirePermission("app_movil", "view"));
 
-router.get("/obras/:obraId/rostros", getRostrosObra);
-router.put("/trabajadores/:id/rostro", guardarRostro);
-router.delete("/trabajadores/:id/rostro", eliminarRostro);
+router.get("/obras/:obraId/rostros", requirePermission("asistencia_movil", "view"), getRostrosObra);
+router.get("/obras/:obraId/unidades/:unidadId/rostros", requirePermission("asistencia_movil", "view"), getRostrosObra);
+router.put("/trabajadores/:id/rostro", requirePermission("asistencia_movil", "create"), guardarRostro);
+router.delete("/trabajadores/:id/rostro", requirePermission("asistencia_movil", "delete"), eliminarRostro);
 
 export default router;

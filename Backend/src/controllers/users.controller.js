@@ -19,14 +19,21 @@ export const getUsers = async (req, res) => {
         u.all_obras,
         u.created_at,
         COALESCE(
-          json_agg(
-            json_build_object('id', o.id, 'nombre', o.nombre)
-          ) FILTER (WHERE o.id IS NOT NULL), '[]'
-        ) AS obras
+          jsonb_agg(DISTINCT jsonb_build_object(
+            'id', o.id, 'nombre', o.nombre, 'all_unidades', uo.all_unidades
+          )) FILTER (WHERE o.id IS NOT NULL), '[]'::jsonb
+        ) AS obras,
+        COALESCE(
+          jsonb_agg(DISTINCT jsonb_build_object(
+            'id', ou.id, 'obra_id', ou.obra_id, 'nombre', ou.nombre
+          )) FILTER (WHERE ou.id IS NOT NULL), '[]'::jsonb
+        ) AS unidades
       FROM users u
       LEFT JOIN roles r ON r.id = u.role_id
       LEFT JOIN user_obras uo ON uo.user_id = u.id
       LEFT JOIN obras o ON o.id = uo.obra_id
+      LEFT JOIN user_obra_unidades au ON au.user_id=uo.user_id AND au.obra_id=uo.obra_id
+      LEFT JOIN obra_unidades ou ON ou.id=au.unidad_id AND ou.obra_id=au.obra_id
       GROUP BY u.id, r.name
       ORDER BY u.created_at DESC
     `);
@@ -213,10 +220,17 @@ export const getUserObras = async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT o.id, o.nombre, o.ubicacion
+      `SELECT o.id, o.nombre, o.ubicacion, uo.all_unidades,
+         COALESCE(
+           json_agg(json_build_object('id', u.id, 'nombre', u.nombre))
+             FILTER (WHERE u.id IS NOT NULL), '[]'
+         ) AS unidades
        FROM user_obras uo
        JOIN obras o ON o.id = uo.obra_id
+       LEFT JOIN user_obra_unidades au ON au.user_id=uo.user_id AND au.obra_id=uo.obra_id
+       LEFT JOIN obra_unidades u ON u.id=au.unidad_id AND u.obra_id=au.obra_id
        WHERE uo.user_id = $1
+       GROUP BY o.id, uo.all_unidades
        ORDER BY o.nombre`,
       [id]
     );
@@ -235,7 +249,7 @@ export const setUserObras = async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { all_obras, obra_ids } = req.body; // obra_ids: number[]
+    const { all_obras, obra_ids, unidades_por_obra } = req.body; // obra_ids: number[]
 
     await client.query("BEGIN");
 
@@ -246,13 +260,47 @@ export const setUserObras = async (req, res) => {
 
     // limpiar asignaciones previas
     await client.query("DELETE FROM user_obras WHERE user_id=$1", [id]);
+    await client.query("DELETE FROM user_obra_unidades WHERE user_id=$1", [id]);
 
     if (!all_obras && Array.isArray(obra_ids) && obra_ids.length > 0) {
-      const values = obra_ids.map((_, i) => `($1, $${i + 2})`).join(", ");
-      await client.query(
-        `INSERT INTO user_obras (user_id, obra_id) VALUES ${values}`,
-        [id, ...obra_ids]
+      const configPorObra = new Map(
+        (Array.isArray(unidades_por_obra) ? unidades_por_obra : [])
+          .map((item) => [Number(item.obra_id), item])
       );
+
+      for (const obraIdValue of obra_ids) {
+        const obraId = Number(obraIdValue);
+        if (!Number.isInteger(obraId) || obraId <= 0) throw new Error("La obra asignada no es válida");
+        const config = configPorObra.get(obraId);
+        const allUnidades = config?.all_unidades !== false;
+
+        await client.query(
+          "INSERT INTO user_obras (user_id, obra_id, all_unidades) VALUES ($1,$2,$3)",
+          [id, obraId, allUnidades]
+        );
+
+        if (!allUnidades) {
+          const unidadIds = [...new Set((config?.unidad_ids || []).map(Number))];
+          if (unidadIds.some((unidadId) => !Number.isInteger(unidadId) || unidadId <= 0)) {
+            throw new Error("La lista de unidades contiene un identificador no válido");
+          }
+          if (unidadIds.length) {
+            const validas = await client.query(
+              `SELECT id FROM obra_unidades
+               WHERE obra_id=$1 AND activa=true AND id=ANY($2::bigint[])`,
+              [obraId, unidadIds]
+            );
+            if (validas.rows.length !== unidadIds.length) {
+              throw new Error("Una o más unidades no pertenecen a la obra seleccionada");
+            }
+            await client.query(
+              `INSERT INTO user_obra_unidades (user_id, obra_id, unidad_id)
+               SELECT $1, $2, unnest($3::bigint[])`,
+              [id, obraId, unidadIds]
+            );
+          }
+        }
+      }
     }
 
     await client.query("COMMIT");

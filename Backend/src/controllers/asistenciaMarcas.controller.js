@@ -1,5 +1,5 @@
 import { pool } from "../config/db.js";
-import { tieneAccesoObra } from "./biometria.controller.js";
+import { obtenerUnidadesAccesibles, tieneAccesoUnidad } from "../utils/unidades.js";
 import { procesarDireccionesPendientes } from "../utils/geocodificacion.js";
 import { marcasTieneDireccion } from "../utils/columnas.js";
 
@@ -16,6 +16,7 @@ const validarMarca = (m) => {
   if (typeof m.uuid !== "string" || !UUID_REGEX.test(m.uuid)) return "uuid inválido";
   if (!Number.isInteger(m.obra_id)) return "obra_id inválido";
   if (!Number.isInteger(m.trabajador_id)) return "trabajador_id i<nválido";
+  if (m.unidad_id !== undefined && !Number.isInteger(m.unidad_id)) return "unidad_id inválido";
   if (!["entrada", "salida"].includes(m.tipo)) return "tipo inválido";
   if (!["facial", "manual"].includes(m.metodo)) return "metodo inválido";
 
@@ -29,15 +30,16 @@ const validarMarca = (m) => {
   return null;
 };
 
-const aplicarEnAsistencias = async (client, marca, fecha, hora) => {
+const aplicarEnAsistencias = async (client, marca, fecha, hora, unidadId) => {
   if (marca.tipo === "entrada") {
     await client.query(
       `
       INSERT INTO asistencias
-        (obra_id, trabajador_id, fecha, estado, hora_entrada,
+        (obra_id, unidad_id, trabajador_id, fecha, estado, hora_entrada,
          horas_trabajadas, horas_extra, metodo_entrada)
-      VALUES ($1, $2, $3, 'asistio', $4, 0, 0, $5)
+      VALUES ($1, $2, $3, $4, 'asistio', $5, 0, 0, $6)
       ON CONFLICT (trabajador_id, fecha) DO UPDATE SET
+        unidad_id = EXCLUDED.unidad_id,
         metodo_entrada = CASE
           WHEN asistencias.hora_entrada IS NULL OR EXCLUDED.hora_entrada < asistencias.hora_entrada
           THEN EXCLUDED.metodo_entrada ELSE asistencias.metodo_entrada END,
@@ -48,16 +50,17 @@ const aplicarEnAsistencias = async (client, marca, fecha, hora) => {
           WHEN asistencias.estado IS NULL OR asistencias.estado = 'falta'
           THEN 'asistio' ELSE asistencias.estado END
     `,
-      [marca.obra_id, marca.trabajador_id, fecha, hora, marca.metodo]
+      [marca.obra_id, unidadId, marca.trabajador_id, fecha, hora, marca.metodo]
     );
   } else {
     await client.query(
       `
       INSERT INTO asistencias
-        (obra_id, trabajador_id, fecha, estado, hora_salida,
+        (obra_id, unidad_id, trabajador_id, fecha, estado, hora_salida,
          horas_trabajadas, horas_extra, metodo_salida)
-      VALUES ($1, $2, $3, 'asistio', $4, 0, 0, $5)
+      VALUES ($1, $2, $3, $4, 'asistio', $5, 0, 0, $6)
       ON CONFLICT (trabajador_id, fecha) DO UPDATE SET
+        unidad_id = EXCLUDED.unidad_id,
         metodo_salida = CASE
           WHEN asistencias.hora_salida IS NULL OR EXCLUDED.hora_salida > asistencias.hora_salida
           THEN EXCLUDED.metodo_salida ELSE asistencias.metodo_salida END,
@@ -68,7 +71,7 @@ const aplicarEnAsistencias = async (client, marca, fecha, hora) => {
           WHEN asistencias.estado IS NULL OR asistencias.estado = 'falta'
           THEN 'asistio' ELSE asistencias.estado END
     `,
-      [marca.obra_id, marca.trabajador_id, fecha, hora, marca.metodo]
+      [marca.obra_id, unidadId, marca.trabajador_id, fecha, hora, marca.metodo]
     );
   }
 
@@ -106,8 +109,9 @@ const procesarMarca = async (marca, usuarioId) => {
 
     const asignado = await client.query(
       `
-      SELECT 1 FROM trabajadores_asignados
+      SELECT unidad_id FROM trabajadores_asignados
       WHERE obra_id = $1 AND trabajador_id = $2 AND activo = true
+      ORDER BY id DESC LIMIT 1
     `,
       [marca.obra_id, marca.trabajador_id]
     );
@@ -117,8 +121,15 @@ const procesarMarca = async (marca, usuarioId) => {
       [marca.obra_id, fecha]
     );
 
-    const estado = asignado.rows.length === 0
+    const unidadId = asignado.rows[0]?.unidad_id;
+    const unidadValida = unidadId != null &&
+      (marca.unidad_id == null || String(marca.unidad_id) === String(unidadId));
+    const accesoUnidad = unidadValida && await tieneAccesoUnidad(usuarioId, marca.obra_id, unidadId);
+
+    const estado = !unidadValida
       ? "no_asignado"
+      : !accesoUnidad
+        ? "sin_acceso"
       : cerrado.rows.length > 0
         ? "dia_cerrado"
         : "aplicada";
@@ -126,16 +137,17 @@ const procesarMarca = async (marca, usuarioId) => {
     const insert = await client.query(
       `
       INSERT INTO asistencia_marcas (
-        uuid_cliente, obra_id, trabajador_id, tipo, metodo, distancia, modelo,
+        uuid_cliente, obra_id, unidad_id, trabajador_id, tipo, metodo, distancia, modelo,
         marcado_en, fecha, hora, lat, lng, precision_m, dispositivo, usuario_id, estado
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       ON CONFLICT (uuid_cliente) DO NOTHING
       RETURNING id
     `,
       [
         marca.uuid,
         marca.obra_id,
+        unidadId ?? null,
         marca.trabajador_id,
         marca.tipo,
         marca.metodo,
@@ -160,7 +172,7 @@ const procesarMarca = async (marca, usuarioId) => {
     }
 
     if (estado === "aplicada") {
-      await aplicarEnAsistencias(client, marca, fecha, hora);
+      await aplicarEnAsistencias(client, marca, fecha, hora, unidadId);
     }
 
     await client.query("COMMIT");
@@ -193,21 +205,12 @@ export const sincronizarMarcas = async (req, res) => {
     });
   }
 
-  const accesoPorObra = new Map();
   const resultados = [];
 
   for (const marca of marcas) {
     const error = validarMarca(marca);
     if (error) {
       resultados.push({ uuid: marca?.uuid ?? null, estado: "invalida", mensaje: error });
-      continue;
-    }
-
-    if (!accesoPorObra.has(marca.obra_id)) {
-      accesoPorObra.set(marca.obra_id, await tieneAccesoObra(req.user.id, marca.obra_id));
-    }
-    if (!accesoPorObra.get(marca.obra_id)) {
-      resultados.push({ uuid: marca.uuid, estado: "sin_acceso" });
       continue;
     }
 
@@ -226,7 +229,13 @@ export const sincronizarMarcas = async (req, res) => {
 export const getMarcasObra = async (req, res) => {
   try {
     const { obraId } = req.params;
-    const { fecha } = req.query;
+    const { fecha, unidad_id: unidadSolicitada } = req.query;
+    const unidades = await obtenerUnidadesAccesibles(req.user.id, obraId);
+    if (unidades === null) return res.status(403).json({ message: "No tienes acceso a esta obra" });
+    const ids = unidades.map((u) => u.id);
+    if (unidadSolicitada && !ids.some((id) => String(id) === String(unidadSolicitada))) {
+      return res.status(403).json({ message: "No tienes acceso a esta unidad" });
+    }
     const colDireccion = (await marcasTieneDireccion())
       ? "m.direccion"
       : "NULL::text AS direccion";
@@ -234,15 +243,18 @@ export const getMarcasObra = async (req, res) => {
     const { rows } = await pool.query(
       `
       SELECT
-        m.id, m.trabajador_id, t.nombre, m.tipo, m.metodo, m.distancia,
+        m.id, m.unidad_id, u.nombre AS unidad_nombre, m.trabajador_id, t.nombre, m.tipo, m.metodo, m.distancia,
         m.marcado_en, m.fecha, m.hora, m.lat, m.lng, m.precision_m,
         ${colDireccion}, m.dispositivo, m.estado, m.recibido_en
       FROM asistencia_marcas m
       JOIN trabajadores t ON t.id = m.trabajador_id
+      JOIN obra_unidades u ON u.id = m.unidad_id AND u.obra_id = m.obra_id
       WHERE m.obra_id = $1 AND m.fecha = $2
+        AND m.unidad_id = ANY($3::bigint[])
+        AND ($4::bigint IS NULL OR m.unidad_id = $4)
       ORDER BY m.marcado_en ASC
     `,
-      [obraId, fecha]
+      [obraId, fecha, ids, unidadSolicitada ?? null]
     );
 
     res.json(rows);

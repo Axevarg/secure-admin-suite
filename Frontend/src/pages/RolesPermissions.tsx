@@ -41,6 +41,9 @@ const MODULE_PERMISSIONS: Record<string, string[]> = {
   asistencia: ["view", "create", "edit", "delete"],
   presupuesto: ["view", "create", "edit"],
   requisiciones: ["view", "create", "edit", "approve"],
+  app_movil: ["view"],
+  asistencia_movil: ["view", "create", "edit", "delete"],
+  requisiciones_movil: ["view", "create", "edit"],
   evidencias: ["view", "create", "delete"],
   bancos: ["view", "create", "edit", "delete"],
   remesas: ["view", "create", "edit", "delete", "approve"],
@@ -64,6 +67,9 @@ const MODULE_LABELS: Record<string, string> = {
   obra_dashboard: "Dashboard Obra",
   presupuesto: "Insumos",
   rh: "RH / Nómina",
+  app_movil: "App móvil",
+  asistencia_movil: "Checador móvil",
+  requisiciones_movil: "Requisiciones móvil",
   bancos: "Bancos",
 };
 

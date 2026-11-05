@@ -10,9 +10,10 @@ import {
   deleteAsignacionContratista, getContratistasParaAsignar,
   asignarTrabajadorDeContratista
 } from "../controllers/asignaciones.controller.js";
+import { authMiddleware } from "../modules/auth/auth.middleware.js";
 
 const router = Router();
-
+router.use(authMiddleware);
 
 
 // 👷 trabajadores

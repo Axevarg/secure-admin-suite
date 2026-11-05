@@ -7,7 +7,7 @@ import authRoutes from "./modules/auth/auth.routes.js";
 
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 app.use(helmet());
 
