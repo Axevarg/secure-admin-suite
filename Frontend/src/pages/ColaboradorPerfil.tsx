@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/lib/axios";
+import { PERMISO_PAGO, tienePermiso } from "@/lib/permissions";
 import {
   ArrowLeft, User, Briefcase, Clock, CreditCard,
   Phone, FileText, History, Upload, Trash2, X,
@@ -102,6 +103,9 @@ type Tab = "personal" | "laboral" | "pago" | "documentos" | "asignaciones" | "hi
 export default function ColaboradorPerfil() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // Solo quien tiene permiso de nómina ve la pestaña de pago.
+  const puedeVerPago = tienePermiso(PERMISO_PAGO);
 
   const [colaborador, setColaborador] = useState<Colaborador | null>(null);
   const [documentos, setDocumentos]   = useState<Documento[]>([]);
@@ -228,14 +232,18 @@ export default function ColaboradorPerfil() {
   const iniciales = `${colaborador.nombre[0] ?? ""}${colaborador.apellido_paterno[0] ?? ""}`.toUpperCase();
   const asignacionActiva = asignaciones.find((a) => a.es_activa);
 
-  const TABS: { key: Tab; label: string; icon: JSX.Element }[] = [
-    { key: "personal",     label: "Personal",     icon: <User size={14} /> },
-    { key: "laboral",      label: "Laboral",      icon: <Briefcase size={14} /> },
-    { key: "pago",         label: "Pago",         icon: <CreditCard size={14} /> },
-    { key: "documentos",   label: "Documentos",   icon: <FileText size={14} /> },
-    { key: "asignaciones", label: "Obra Actual",  icon: <HardHat size={14} /> },
-    { key: "historial",    label: "Historial",    icon: <History size={14} /> },
-  ];
+const TABS_BASE: { key: Tab; label: string; icon: JSX.Element }[] = [
+  { key: "personal",     label: "Personal",     icon: <User size={14} /> },
+  { key: "laboral",      label: "Laboral",      icon: <Briefcase size={14} /> },
+  { key: "pago",         label: "Pago",         icon: <CreditCard size={14} /> },
+  { key: "documentos",   label: "Documentos",   icon: <FileText size={14} /> },
+  { key: "asignaciones", label: "Obra Actual",  icon: <HardHat size={14} /> },
+  { key: "historial",    label: "Historial",    icon: <History size={14} /> },
+];
+
+const TABS = TABS_BASE.filter(
+  (t) => t.key !== "pago" || puedeVerPago
+);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -431,8 +439,8 @@ export default function ColaboradorPerfil() {
           </div>
         )}
 
-        {/* ── PAGO ── */}
-        {tab === "pago" && (
+        {/* ── PAGO (solo con permiso de nómina) ── */}
+        {tab === "pago" && puedeVerPago && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2 bg-slate-900 text-white rounded-2xl p-6 flex justify-between items-center">
               <div>

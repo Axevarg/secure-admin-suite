@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/axios";
+import { PERMISO_PAGO, tienePermiso } from "@/lib/permissions";
 import { Input } from "@/components/ui/input";
 
 import {
@@ -30,7 +31,9 @@ interface Horario {
   hora_salida: string;
 }
 
-const STEPS = [
+type PasoKey = "personal" | "laboral" | "pago" | "emergencia";
+
+const PASOS: { key: PasoKey; label: string; icon: React.ReactNode }[] = [
   { key: "personal", label: "Datos Personales", icon: <User size={16} /> },
   { key: "laboral", label: "Datos Laborales", icon: <Briefcase size={16} /> },
   { key: "pago", label: "Datos de Pago", icon: <CreditCard size={16} /> },
@@ -66,18 +69,18 @@ const HORARIO_INICIAL: Horario[] = DIAS.map((dia) => ({
   hora_salida: dia === "sabado" ? "14:00" : dia === "domingo" ? "" : "19:00",
 }));
 
-const CAMPOS_POR_PASO = [
-  [
+const CAMPOS_POR_PASO = {
+  personal: [
     "nombre", "apellido_paterno", "apellido_materno", "fecha_nacimiento",
     "sexo", "estado_civil", "curp", "rfc", "nss", "telefono", "email", "direccion",
   ],
-  ["departamento_id", "puesto_id", "fecha_ingreso", "tipo_contrato", "turno"],
-  ["salario_diario", "forma_pago", "banco", "clabe", "numero_cuenta"],
-  [
+  laboral: ["departamento_id", "puesto_id", "fecha_ingreso", "tipo_contrato", "turno"],
+  pago: ["salario_diario", "forma_pago", "banco", "clabe", "numero_cuenta"],
+  emergencia: [
     "contacto_emergencia_nombre", "contacto_emergencia_telefono",
     "contacto_emergencia_relacion",
   ],
-] as const;
+} as const;
 
 const Field = ({
   label,
@@ -105,6 +108,13 @@ export default function ColaboradorForm() {
   const { id } = useParams();
 
   const isEdit = !!id;
+
+  // Solo quien tiene permiso de nómina ve y captura los datos de pago.
+  const puedeVerPago = useMemo(() => tienePermiso(PERMISO_PAGO), []);
+  const pasos = useMemo(
+    () => PASOS.filter((p) => p.key !== "pago" || puedeVerPago),
+    [puedeVerPago],
+  );
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -156,6 +166,9 @@ export default function ColaboradorForm() {
     contacto_emergencia_telefono: "",
     contacto_emergencia_relacion: "",
   });
+
+  const pasoActual = pasos[step].key;
+  const isLastStep = step === pasos.length - 1;
 
   const set = (k: string, v: string) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -301,19 +314,20 @@ export default function ColaboradorForm() {
 
       const fd = new FormData();
 
-      CAMPOS_POR_PASO[step].forEach((campo) => {
+      const campos: readonly (keyof typeof form)[] = CAMPOS_POR_PASO[pasoActual];
+      campos.forEach((campo) => {
         const valor = form[campo];
         if (valor !== "") fd.append(campo, valor);
       });
 
-      if (step === 1) {
+      if (pasoActual === "laboral") {
         const horariosValidos = horarios.filter((h) => h.hora_entrada && h.hora_salida);
         fd.append("horarios", JSON.stringify(horariosValidos));
       }
 
       if (!savedId && user.id) fd.append("usuario_id", String(user.id));
 
-      if (step === 0 && foto) {
+      if (pasoActual === "personal" && foto) {
         fd.append("foto", foto);
       }
 
@@ -348,7 +362,7 @@ export default function ColaboradorForm() {
     else setStep((actual) => actual + 1);
   };
 
-  const isLastStep = step === STEPS.length - 1;
+  
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto">
@@ -379,14 +393,14 @@ export default function ColaboradorForm() {
           </h1>
 
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-1">
-            Completa los 4 pasos para registrar al colaborador
+            Completa los {pasos.length} pasos para registrar al colaborador
           </p>
         </div>
       </div>
 
       {/* STEPPER */}
       <div className="flex gap-2 bg-white rounded-[2rem] border border-slate-100 shadow-sm p-3">
-        {STEPS.map((s, i) => (
+        {pasos.map((s, i) => (
           <button
             key={s.key}
             onClick={() => i < step && setStep(i)}
@@ -413,8 +427,8 @@ export default function ColaboradorForm() {
 
       {/* FORM */}
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8">
-        {/* ── PASO 1: PERSONAL ── */}
-        {step === 0 && (
+        {/* ── PASO: PERSONAL ── */}
+        {pasoActual === "personal" && (
           <div className="space-y-6">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-1.5 h-6 bg-red-600 rounded-full" />
@@ -593,8 +607,8 @@ export default function ColaboradorForm() {
           </div>
         )}
 
-        {/* PASO 2 */}
-        {step === 1 && (
+        {/* ── PASO: LABORAL ── */}
+        {pasoActual === "laboral" && (
           <div className="space-y-6">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-1.5 h-6 bg-red-600 rounded-full" />
@@ -786,8 +800,8 @@ export default function ColaboradorForm() {
           </div>
         )}
 
-        {/* ── PASO 3: PAGO ── */}
-        {step === 2 && (
+        {/* ── PASO: PAGO (solo con permiso de nómina) ── */}
+        {pasoActual === "pago" && puedeVerPago && (
           <div className="space-y-6">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-1.5 h-6 bg-red-600 rounded-full" />
@@ -887,8 +901,8 @@ export default function ColaboradorForm() {
           </div>
         )}
 
-        {/* ── PASO 4: EMERGENCIA ── */}
-        {step === 3 && (
+        {/* ── PASO: EMERGENCIA ── */}
+        {pasoActual === "emergencia" && (
           <div className="space-y-6">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-1.5 h-6 bg-red-600 rounded-full" />
@@ -961,13 +975,17 @@ export default function ColaboradorForm() {
                   { label: "CURP", value: form.curp || "—" },
                   { label: "Ingreso", value: form.fecha_ingreso },
                   { label: "Contrato", value: form.tipo_contrato || "—" },
-                  {
-                    label: "Salario diario",
-                    value: form.salario_diario
-                      ? `$${Number(form.salario_diario).toLocaleString("es-MX")}`
-                      : "—",
-                  },
-                  { label: "Forma de pago", value: form.forma_pago || "—" },
+                  ...(puedeVerPago
+                    ? [
+                        {
+                          label: "Salario diario",
+                          value: form.salario_diario
+                            ? `$${Number(form.salario_diario).toLocaleString("es-MX")}`
+                            : "—",
+                        },
+                        { label: "Forma de pago", value: form.forma_pago || "—" },
+                      ]
+                    : []),
                 ].map((r) => (
                   <div
                     key={r.label}
