@@ -55,6 +55,7 @@ const mainNav = [
     perm: "dashboard:view",
   },
   { title: "Obras", url: "/obras", icon: Building2, perm: "obras:view" },
+  { title: "Evidencias de entregas (App)", url: "/evidencias-entregas-app", icon: Camera, perm: "evidencias_app:view" },
 ];
 
 const systemNav = [

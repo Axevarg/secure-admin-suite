@@ -38,6 +38,7 @@ import ColaboradorForm from "./pages/ColaboradorForm";
 import NominaLista from "./pages/Nominalista";
 import NominaDetalle from "./pages/Nominadetalle";
 import CumpleanosPage from "@/pages/CumpleanosPage";
+import EvidenciasEntregasAppPage from "@/pages/EvidenciasEntregasAppPage";
 
 const queryClient = new QueryClient();
 
@@ -125,6 +126,14 @@ const App = () => (
               element={
                 <ProtectedRoute permission="remesas:view">
                   <RemesasPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/evidencias-entregas-app"
+              element={
+                <ProtectedRoute permission="evidencias_app:view">
+                  <EvidenciasEntregasAppPage />
                 </ProtectedRoute>
               }
             />

@@ -9,7 +9,9 @@ FROM (VALUES
   ('asistencia_movil', 'delete'),
   ('requisiciones_movil', 'view'),
   ('requisiciones_movil', 'create'),
-  ('requisiciones_movil', 'edit')
+  ('requisiciones_movil', 'edit'),
+  ('evidencias_app', 'view'),
+  ('evidencias_app', 'create')
 ) AS nuevos(module, action)
 WHERE NOT EXISTS (
   SELECT 1 FROM permissions p

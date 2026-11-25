@@ -5,6 +5,7 @@ import { authMiddleware } from "../modules/auth/auth.middleware.js";
 import { loadPermissions } from "../middleware/loadPermissions.js";
 import { requirePermission } from "../middleware/requierePermission.js";
 import { tieneAccesoObra } from "../utils/unidades.js";
+import { crearEvidenciaApp, listarEvidenciasApp, uploadEvidenciaApp, verArchivoEvidenciaApp } from "../controllers/evidenciasApp.controller.js";
 
 const router = Router();
 
@@ -15,6 +16,11 @@ router.get("/accesos", (req, res) => {
 });
 
 router.use(requirePermission("app_movil", "view"));
+
+router.get("/evidencias", requirePermission("evidencias_app", "view"), listarEvidenciasApp);
+router.post("/evidencias", requirePermission("evidencias_app", "create"), uploadEvidenciaApp.single("foto"), crearEvidenciaApp);
+router.get("/evidencias/archivo/:evidenciaId/:tipo", requirePermission("evidencias_app", "view"), verArchivoEvidenciaApp);
+router.get("/evidencias/archivo/:evidenciaId", requirePermission("evidencias_app", "view"), verArchivoEvidenciaApp);
 
 router.get("/requisiciones/obra/:obraId", requirePermission("requisiciones_movil", "view"), async (req, res, next) => {
   if (!(await tieneAccesoObra(req.user.id, req.params.obraId))) {

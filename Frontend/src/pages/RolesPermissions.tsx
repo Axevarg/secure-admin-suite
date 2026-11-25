@@ -44,6 +44,7 @@ const MODULE_PERMISSIONS: Record<string, string[]> = {
   app_movil: ["view"],
   asistencia_movil: ["view", "create", "edit", "delete"],
   requisiciones_movil: ["view", "create", "edit"],
+  evidencias_app: ["view", "create"],
   evidencias: ["view", "create", "delete"],
   bancos: ["view", "create", "edit", "delete"],
   remesas: ["view", "create", "edit", "delete", "approve"],
@@ -70,6 +71,7 @@ const MODULE_LABELS: Record<string, string> = {
   app_movil: "App móvil",
   asistencia_movil: "Checador móvil",
   requisiciones_movil: "Requisiciones móvil",
+  evidencias_app: "Evidencias de entregas (App)",
   bancos: "Bancos",
 };
 

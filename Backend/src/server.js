@@ -25,6 +25,7 @@ import nominaRouter from "./routes/nomina.routes.js";
 import indirectosRoutes from "./routes/indirectos.routes.js";
 import biometriaRoutes from "./routes/biometria.routes.js";
 import mobileRoutes from "./routes/mobile.routes.js";
+import evidenciasAppRoutes from "./routes/evidenciasApp.routes.js";
 import { iniciarGeocodificacion } from "./utils/geocodificacion.js";
 import cors from "cors";
 
@@ -35,6 +36,8 @@ app.use(cors({
 
 app.use("/uploads", (req, res, next) => {
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  // App evidence files are delivered through the authenticated mobile route only.
+  if (req.path.startsWith("/evidencias-app/")) return res.sendStatus(404);
   next();
 }, express.static("uploads"));
 
@@ -61,6 +64,7 @@ app.use("/nomina", nominaRouter);
 app.use("/indirectos", indirectosRoutes);
 app.use("/biometria", biometriaRoutes);
 app.use("/mobile", mobileRoutes);
+app.use("/evidencias-app", evidenciasAppRoutes);
 app.use(express.json());
 
 app.use("/evidencias", evidenciasRoutes);

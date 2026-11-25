@@ -11,6 +11,7 @@ const LOTE = 50;
 const INTERVALO_MS = 10 * 60 * 1000;
 
 let enProceso = false;
+let evidenciasEnProceso = false;
 let avisoSinColumna = false;
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -89,7 +90,51 @@ export const procesarDireccionesPendientes = async () => {
   }
 };
 
+const procesarDireccionesEvidenciasApp = async () => {
+  if (evidenciasEnProceso) return;
+  evidenciasEnProceso = true;
+  try {
+    const { rows } = await pool.query(`
+      SELECT origen, id, lat, lng
+      FROM (
+        SELECT 'principal'::text AS origen, id, lat, lng, capturada_en
+        FROM evidencias_app
+        WHERE direccion IS NULL AND lat IS NOT NULL AND lng IS NOT NULL
+        UNION ALL
+        SELECT 'foto'::text AS origen, foto_id AS id, lat, lng, capturada_en
+        FROM evidencias_app_fotos
+        WHERE direccion IS NULL AND lat IS NOT NULL AND lng IS NOT NULL
+      ) pendientes
+      ORDER BY capturada_en DESC
+      LIMIT $1
+    `, [20]);
+
+    for (const evidencia of rows) {
+      try {
+        const direccion = await buscarDireccion(evidencia.lat, evidencia.lng);
+        if (direccion) {
+          const tabla = evidencia.origen === "foto" ? "evidencias_app_fotos" : "evidencias_app";
+          const columnaId = evidencia.origen === "foto" ? "foto_id" : "id";
+          await pool.query(`UPDATE ${tabla} SET direccion=$1 WHERE ${columnaId}=$2`, [direccion.slice(0, 300), evidencia.id]);
+        }
+      } catch (err) {
+        console.error(`ERROR DIRECCIÓN EVIDENCIA APP ${evidencia.id}:`, err.message);
+      }
+      await esperar(PAUSA_MS);
+    }
+  } catch (err) {
+    console.error("ERROR PROCESAR DIRECCIONES EVIDENCIAS APP:", err.message);
+  } finally {
+    evidenciasEnProceso = false;
+  }
+};
+
+const procesarGeocodificacion = async () => {
+  await procesarDireccionesPendientes();
+  await procesarDireccionesEvidenciasApp();
+};
+
 export const iniciarGeocodificacion = () => {
-  procesarDireccionesPendientes();
-  setInterval(procesarDireccionesPendientes, INTERVALO_MS);
+  procesarGeocodificacion();
+  setInterval(procesarGeocodificacion, INTERVALO_MS);
 };
